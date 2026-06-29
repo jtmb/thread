@@ -73,6 +73,16 @@ curl "http://localhost:5000/api/v1/sessions/demo/search?q=ranking"
 
 ## Features
 
+### Why Thread?
+
+- **Agents that remember**. Copilot and Cline reset every session. Thread gives them persistent memory — your preferences, project decisions, and hard-won debugging insights carry forward automatically.
+- **Feed it your own documents**. Drop in markdown notes, plain-text logs, JSON exports, or any `.md`/`.txt`/`.json` file — Thread auto-chunks them into searchable entries. Point the CLI import tool at a directory and walk away.
+- **Runs on anything**. Zero external dependencies beyond Python and SQLite (both built into Raspberry Pi OS). A Pi 3B with 1GB RAM handles it comfortably. No Docker, no Postgres, no cloud bill.
+- **Instant full-text search**. Every word across every entry in every session is indexed with FTS5. Prefix queries, phrase matching, boolean negation — find anything in under 50ms.
+- **Git-backed history**. Every create, update, and delete commits to a per-session git repo. Roll back mistakes, audit what changed, or diff your agent's context over time.
+- **You own your data**. Self-hosted on your own hardware. No SaaS, no telemetry, no API keys. The database is a single SQLite file you can back up with `scp`.
+- **Works with your existing tools**. MCP bridge for VS Code Copilot and Cline. REST API for curl, scripts, or custom integrations. No new workflow to learn.
+
 ### Core API
 - **Full CRUD** — Sessions and entries with cursor pagination
 - **FTS5 Search** — BM25 relevance ranking, prefix queries, phrase matching, boolean negation
