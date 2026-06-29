@@ -160,7 +160,7 @@ Configuration must be explicit, centralized, and environment-aware.
 - **Secrets are not config.** API keys, passwords, tokens live in a secrets manager or environment variable injected by the platform. They are never in config files, committed to git, or defaulted in code.
 - **Feature flags.** Use a feature flag system for gradual rollouts and operational toggles. Every flag needs an owner, an expiry date, and a plan for removal.
 - **Sensible defaults.** Every config value has a safe default. A new developer should be able to run the project with zero configuration. Zero-config means zero-friction.
-- **Document every config value.** What it does, valid values, default, and what happens when it's missing. The config module is its own documentation.
+- **Document every config value.** What it does, valid values, default, and what happens when it's missing. Every environment variable must be listed in `docs/ENVIRONMENT-VARIABLES.md`. When adding or changing a config value, update that document in the same PR.
 
 
 # Naming Conventions

@@ -91,25 +91,51 @@ def _error(status: int, code: str, message: str) -> tuple:
 def list_entries(name: str):
     """List entries in a session with cursor-based pagination.
 
-    Query params: ?after=<id>&limit=<int>
-    Cursor-based: returns entries with id > after, ordered by id ASC.
+    Query params: ?after=<id>&limit=<int>&sort=asc|desc
+    - sort=asc (default): id > after, ORDER BY id ASC (oldest first)
+    - sort=desc: id < after, ORDER BY id DESC (newest first).
+      For the first page, use a high after value (or omit it — server
+      auto-resolves to max_id + 1).
     """
     if not _resolve_session(name):
         return _error(404, "NOT_FOUND", f"Session '{name}' not found")
 
     db = g.db
 
-    after_id = request.args.get("after", "0", type=int)
+    after_id = request.args.get("after", type=int)
     limit = request.args.get(
         "limit", config.DEFAULT_PAGE_SIZE, type=int
     )
     limit = min(limit, config.MAX_PAGE_SIZE)
+    sort = request.args.get("sort", "asc", type=str)
 
-    entries = models.list_entries_cursor(db, g.session_id, after_id=after_id, limit=limit)
+    if sort not in ("asc", "desc"):
+        return _error(400, "INVALID_SORT", "sort must be 'asc' or 'desc'")
 
-    # Determine if there are more entries
+    # When sort=desc and no after cursor, resolve to max_id + 1 to start
+    # from the newest entry
+    if sort == "desc" and after_id is None:
+        row = db.execute(
+            "SELECT MAX(id) FROM entries WHERE session_id = ?",
+            (g.session_id,),
+        ).fetchone()
+        max_id = row[0] if row and row[0] else 0
+        after_id = max_id + 1
+
+    # Sensible default for asc
+    if sort == "asc" and after_id is None:
+        after_id = 0
+
+    entries = models.list_entries_cursor(
+        db, g.session_id, after_id=after_id, limit=limit, sort=sort
+    )
+
+    # Build pagination cursor
     has_more = len(entries) == limit
-    next_cursor = entries[-1]["id"] if entries and has_more else None
+    if entries:
+        next_cursor = entries[-1]["id"] if sort == "asc" else entries[-1]["id"]
+    else:
+        next_cursor = None
 
     return jsonify({
         "data": entries,

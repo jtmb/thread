@@ -1,0 +1,25 @@
+{
+  "name": "Thread Dev — Cline 3.89.2",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+  "features": {},
+  "customizations": {
+    "vscode": {
+      // Lock Cline at 3.89.2 — 4.0.0 broke MCP stdio connections
+      "extensions": [
+        "saoudrizwan.claude-dev@3.89.2"
+      ],
+      "settings": {
+        // Prevent VS Code from auto-updating extensions in this container
+        "extensions.autoUpdate": false,
+        "extensions.autoCheckUpdates": false
+      }
+    }
+  },
+  "forwardPorts": [5000],
+  "postCreateCommand": "pip install -r thread_server/requirements.txt",
+  "remoteUser": "vscode",
+  "mounts": [
+    // Persist Cline data across container rebuilds
+    "source=cline-data-${localWorkspaceFolderBasename},target=/home/vscode/.cline,type=volume"
+  ]
+}

@@ -32,9 +32,8 @@ Session start
        2. Download 5 bridge files from GitHub raw
        3. python3 -m venv .vscode/thread-bridge/.venv
        4. Install requests into that venv
-       5. Write .vscode/mcp.json (Copilot)
-       6. Write Cline MCP config (global + workspace)
-       7. Check if server is reachable; if not, tell user how to start it
+       5. Write .vscode/mcp.json
+       6. Check if server is reachable; if not, tell user how to start it
 ```
 
 ### Step-by-Step Implementation
@@ -108,49 +107,16 @@ If connection refused or timeout, tell the user:
 > `docker run -d --name thread-server -p 5000:5000 -v thread_data:/app/data --restart unless-stopped thread-server`  
 > Or clone and run: `git clone https://github.com/jtmb/thread && cd thread && docker compose up -d`
 
-**Step 6 — Write Cline MCP config (if Cline extension is present):**
-
-Check if Cline's global settings directory exists:
-```bash
-ls ~/.vscode-server/data/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json 2>/dev/null
-```
-
-If found, merge the Thread server into it. Read the file, add `"thread"` to `mcpServers`, and write back. Same config shape as the `.vscode/mcp.json` server block but the top-level key is `mcpServers` (not `servers`):
-
-```json
-{
-  "mcpServers": {
-    "thread": {
-      "type": "stdio",
-      "command": "<WORKSPACE_ROOT>/.vscode/thread-bridge/.venv/bin/python",
-      "args": ["-m", "thread_bridge.bridge"],
-      "cwd": "<WORKSPACE_ROOT>/.vscode/thread-bridge",
-      "env": {
-        "THREAD_SERVER_URL": "http://localhost:5000",
-        "THREAD_DEFAULT_SESSION": "<WORKSPACE_BASENAME>",
-        "THREAD_REQUEST_TIMEOUT": "10"
-      }
-    }
-  }
-}
-```
-
-Preserve any other servers already in `mcpServers` — merge, don't overwrite.
-
-Also write a workspace-level fallback at `.cline/mcp.json` (same content). This file lives at the workspace root and Cline merges it with the global config.
-
-If Cline's directory doesn't exist, just write `.cline/mcp.json` at the workspace root — Cline will use it when the extension is installed later.
-
-**Important:** The `.cline/mcp.json` workspace config goes at the workspace root (e.g., `/home/user/repos/thread/.cline/mcp.json`). Do NOT put it inside `.vscode/` or `.clinerules/`.
+**Never auto-start the server.** Don't run `docker build`, `docker run`, `docker compose up`, or `python server.py`. The user manages the server lifecycle.
 
 ## Automatic Behavior
 
 ### At Session Start
 - Run the bootstrap flow above (skip if already configured)
 - Determine the session name: use the workspace folder basename (e.g., `thread` from `/home/user/repos/thread`). Run `basename "$PWD"` to get it.
-- Call `thread_read_entries` with `sort: "desc"`, `limit: 10` to see the most recent entries (newest first)
 - Call `thread_search` with the user's first question to find relevant past context in that session
 - If results exist, summarize the most relevant entries before answering
+- Call `thread_read_entries` with `limit=10` to see recent activity in the session
 
 ### During the Session — MANDATORY CHECKLIST
 
@@ -168,7 +134,7 @@ Every time you complete a code change (write/edit/delete any file), pause and as
 **After every edit_* or create_file call, check this list before making the next edit.** If you forget and call `task_complete` without updating Thread, you have violated this rule.
 
 ### At Session End
-- When the user says "thanks", "done", "that's all" "that worked", or similar wrap-up phrases, save a summary entry with `priority=5`, tags: `["summary"]`
+- When the user says "thanks", "done", "that's all", or similar wrap-up phrases, save a summary entry with `priority=5`, tags: `["summary"]`
 
 ### Uploading Copilot Conversation Transcripts
 
@@ -208,9 +174,6 @@ When you create or modify documentation files (`.md`, `.txt`, `.json`, `.jsonl`)
 
 ### VS Code Integration
 Once `.vscode/mcp.json` is written, the VS Code MCP extension automatically detects the config change and spawns the bridge process. No manual reload needed. If Thread tools don't appear within ~15 seconds, run the VS Code command `Developer: Reload Window`.
-
-### Cline Integration
-Once the Cline MCP config is written (global settings and/or `.cline/mcp.json`), the user must **reload the Cline extension** for it to pick up the new server. Tell the user: "Reload the Cline extension (or the window) to activate the Thread MCP server." The Cline extension does NOT auto-detect config file changes — reload is manual.
 
 ## Session Names
 Use the user's current project name or topic as the session name. Default to the configured `THREAD_DEFAULT_SESSION` if you're unsure.

@@ -142,19 +142,21 @@ def read_entries(
     session: str,
     limit: int = 50,
     after: int | None = None,
+    sort: str = "asc",
 ) -> list[dict]:
     """Read entries from a session with cursor-based pagination.
 
     Args:
         session: Session name.
-        limit: Max entries to return (server capped).
-        after: Return entries with id > this value (cursor).
+        limit: Max entries to return (server capped at 200).
+        after: Cursor value. asc: id > after. desc: id < after.
+        sort: 'asc' (oldest first, default) or 'desc' (newest first).
 
     Returns:
         List of entry dicts.
     """
-    params = {"limit": limit}
-    if after:
+    params = {"limit": limit, "sort": sort}
+    if after is not None:
         params["after"] = after
 
     resp = _get_session().get(

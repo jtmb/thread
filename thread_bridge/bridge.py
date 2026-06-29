@@ -67,7 +67,7 @@ TOOLS = [
     },
     {
         "name": "thread_read_entries",
-        "description": "Read entries from a Thread session with cursor-based pagination. Use 'after' to page through results.",
+        "description": "Read entries from a Thread session with cursor-based pagination. Use 'after' to page through results. Use sort='desc' to get newest entries first.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -81,7 +81,12 @@ TOOLS = [
                 },
                 "after": {
                     "type": "integer",
-                    "description": "Cursor — return entries with id > this value.",
+                    "description": "Cursor — with sort='asc' returns id > after. With sort='desc' returns id < after. Omit for first page.",
+                },
+                "sort": {
+                    "type": "string",
+                    "enum": ["asc", "desc"],
+                    "description": "'asc' (oldest first, default) or 'desc' (newest first). Use 'desc' to see recent entries.",
                 },
             },
         },
@@ -371,6 +376,7 @@ def handle_tool_call(name: str, args: dict[str, Any]) -> Any:
                 _session(args),
                 limit=args.get("limit", 50),
                 after=args.get("after"),
+                sort=args.get("sort", "asc"),
             )
         elif name == "thread_read_entries_batch":
             return api_client.read_entries_batch(

@@ -201,27 +201,40 @@ def list_entries_cursor(
     session_id: int,
     after_id: int = 0,
     limit: int | None = None,
+    sort: str = "asc",
 ) -> list[dict]:
     """List entries using cursor-based pagination — O(log n) via index seek.
 
     Args:
         db: Active database connection.
         session_id: Session to list entries from.
-        after_id: Return entries with id > this value (0 = start from beginning).
+        after_id: Cursor value. When sort=asc, returns id > after_id.
+                  When sort=desc, returns id < after_id (use a high value like
+                  current max id + 1 to start from the end).
         limit: Max entries to return (capped at MAX_PAGE_SIZE).
+        sort: 'asc' (oldest first, default) or 'desc' (newest first).
 
     Returns:
-        List of entry dicts, ordered by id ascending.
+        List of entry dicts.
     """
     limit = limit or config.DEFAULT_PAGE_SIZE
     limit = min(limit, config.MAX_PAGE_SIZE)
-    rows = db.execute(
-        """SELECT * FROM entries
-           WHERE session_id = ? AND id > ?
-           ORDER BY id ASC
-           LIMIT ?""",
-        (session_id, after_id, limit),
-    ).fetchall()
+    if sort == "desc":
+        rows = db.execute(
+            """SELECT * FROM entries
+               WHERE session_id = ? AND id < ?
+               ORDER BY id DESC
+               LIMIT ?""",
+            (session_id, after_id, limit),
+        ).fetchall()
+    else:
+        rows = db.execute(
+            """SELECT * FROM entries
+               WHERE session_id = ? AND id > ?
+               ORDER BY id ASC
+               LIMIT ?""",
+            (session_id, after_id, limit),
+        ).fetchall()
     return [_row_to_entry(r) for r in rows]
 
 

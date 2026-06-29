@@ -8,18 +8,46 @@ services:
       # Persistent data — survives container rebuilds and upgrades
       - thread_data:/app/data
     environment:
+      # ── Networking ──────────────────────────────────────────────────────────
+      # Interface to bind the HTTP server to (0.0.0.0 = all interfaces)
       - THREAD_HOST=0.0.0.0
+      # Port the HTTP server listens on
       - THREAD_PORT=5000
+
+      # ── Storage ─────────────────────────────────────────────────────────────
+      # SQLite database file path (inside the container)
       - THREAD_DB_PATH=/app/data/thread.db
+      # Root directory for per-session Git tracking repos
       - THREAD_GIT_BASE=/app/data/git
+
+      # ── Logging ─────────────────────────────────────────────────────────────
+      # Log level: DEBUG | INFO | WARNING | ERROR | CRITICAL
       - THREAD_LOG_LEVEL=${THREAD_LOG_LEVEL:-INFO}
+      # Flask debug mode (never enable in production)
       - THREAD_DEBUG=false
+
+      # ── Thread Pool ─────────────────────────────────────────────────────────
+      # Number of WSGI worker threads (tune for available RAM)
       - THREAD_POOL_SIZE=${THREAD_POOL_SIZE:-12}
+      # Max seconds a thread waits for a database connection before erroring
       - THREAD_POOL_TIMEOUT=10
+
+      # ── Query Limits ────────────────────────────────────────────────────────
+      # Max entries returned by FTS5 full-text search
       - THREAD_MAX_SEARCH_RESULTS=100
+      # Max file size for upload (thread_upload_file). 300MB handles large transcripts.
+      - THREAD_MAX_UPLOAD_SIZE=${THREAD_MAX_UPLOAD_SIZE:-314572800}
+      # Max characters per single entry content field (100KB default)
+      - THREAD_MAX_CONTENT_LENGTH=${THREAD_MAX_CONTENT_LENGTH:-100000}
+
+      # ── Caching ─────────────────────────────────────────────────────────────
+      # Max session name→id mappings cached (LRU eviction, 95%+ hit rate)
       - THREAD_CACHE_SIZE=512
+      # Max cached FTS5 search result sets
       - THREAD_SEARCH_CACHE_SIZE=128
+      # How long search results stay cached (seconds)
       - THREAD_SEARCH_CACHE_TTL=5
+      # How long tag lists stay cached (seconds)
       - THREAD_TAG_CACHE_TTL=30
     restart: unless-stopped
     # Resource limits — conservative for Pi, generous for x86

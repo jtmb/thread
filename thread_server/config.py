@@ -45,8 +45,8 @@ MAX_SEARCH_RESULTS: int = int(os.environ.get("THREAD_MAX_SEARCH_RESULTS", "100")
 DEFAULT_PAGE_SIZE: int = int(os.environ.get("THREAD_DEFAULT_PAGE_SIZE", "50"))
 MAX_PAGE_SIZE: int = int(os.environ.get("THREAD_MAX_PAGE_SIZE", "200"))
 MAX_BULK_SIZE: int = 100  # Max entries per bulk create request
-MAX_CONTENT_LENGTH: int = 100_000  # 100KB max per entry content
-MAX_UPLOAD_SIZE: int = 4 * 1024 * 1024  # 4MB max file upload
+MAX_CONTENT_LENGTH: int = int(os.environ.get("THREAD_MAX_CONTENT_LENGTH", "100000"))  # 100KB max per entry content
+MAX_UPLOAD_SIZE: int = int(os.environ.get("THREAD_MAX_UPLOAD_SIZE", str(4 * 1024 * 1024)))  # 4MB max file upload
 
 # ── Runtime State ─────────────────────────────────────────────────────────────
 # _start_time is set by stats_collector.record_request_start()
@@ -61,5 +61,9 @@ def validate() -> None:
         raise ValueError("THREAD_POOL_TIMEOUT must be > 0")
     if MAX_PAGE_SIZE > 1000:
         raise ValueError("THREAD_MAX_PAGE_SIZE must be <= 1000")
+    if MAX_CONTENT_LENGTH < 1000:
+        raise ValueError("THREAD_MAX_CONTENT_LENGTH must be >= 1000")
+    if MAX_UPLOAD_SIZE < 1024:
+        raise ValueError("THREAD_MAX_UPLOAD_SIZE must be >= 1024")
     if LOG_LEVEL not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
         raise ValueError(f"Invalid THREAD_LOG_LEVEL: {LOG_LEVEL}")

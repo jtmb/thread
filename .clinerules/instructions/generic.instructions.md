@@ -13,7 +13,7 @@ This instruction fires for files that don't match a specific framework overlay. 
 
 2. **Write comments** — every function, class, and non-obvious block needs a human-readable comment explaining why and what.
 
-3. **Keep docs in sync** — every code change updates `docs/` at the repo root. If you add or change a configuration value, update `docs/ENVIRONMENT-VARIABLES.md`.
+3. **Keep docs in sync** — every code change updates `docs/` at the repo root.
 
 4. **Test before done** — lint, build, test, manual smoke test before claiming completion.
 
