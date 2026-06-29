@@ -6,7 +6,7 @@
 [![Tests](https://img.shields.io/badge/tests-124%20passed-success?style=flat-square)](./tests/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 
-**Persistent memory for AI coding agents** — a self-hosted context server purpose-built for Raspberry Pi. Give VS Code Copilot and Cline long-term memory, full-text search, and git-versioned entries across every conversation.
+**Persistent memory for AI coding agents** — a self-hosted context server purpose-built to be as light weight as possible and dependency free. This makes it easy to run on smaller factor and older hardware. Give VS Code Copilot and Cline long-term memory, full-text search, and git-versioned entries across every conversation.
 
 [Overview](#overview) • [Quick Start](#quick-start) • [Features](#features) • [MCP Setup](#mcp-setup) • [Documentation](#documentation) • [Performance](#performance)
 
