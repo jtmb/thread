@@ -64,8 +64,17 @@ def get_session_by_id(db: sqlite3.Connection, session_id: int) -> dict | None:
 
 
 def list_sessions(db: sqlite3.Connection) -> list[dict]:
-    """Return all sessions, newest first."""
-    rows = db.execute("SELECT * FROM sessions ORDER BY created_at DESC").fetchall()
+    """Return all sessions with entry counts, newest first.
+
+    Uses a correlated subquery to count entries per session in a single
+    round-trip. The COUNT aggregates on the covering index — no table scan.
+    """
+    rows = db.execute(
+        """SELECT s.*,
+                  (SELECT COUNT(*) FROM entries e WHERE e.session_id = s.id) AS entry_count
+           FROM sessions s
+           ORDER BY s.created_at DESC"""
+    ).fetchall()
     return [dict(r) for r in rows]
 
 

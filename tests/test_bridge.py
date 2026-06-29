@@ -146,7 +146,7 @@ def test_mcp_tools_list():
     result = handle_message(msg)
     assert result is not None
     assert "tools" in result["result"]
-    assert len(result["result"]["tools"]) == 12
+    assert len(result["result"]["tools"]) == 13
 
     tool_names = [t["name"] for t in result["result"]["tools"]]
     assert "thread_create_entry" in tool_names

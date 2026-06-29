@@ -33,6 +33,8 @@ flowchart LR
 | `THREAD_DB_PATH` | `data/thread.db` | Absolute or relative path | SQLite database file location. Created if missing. |
 | `THREAD_GIT_BASE` | `data/git/` | Absolute or relative directory | Root directory for per-session Git tracking repos. Created if missing. |
 
+> **Storage capacity monitoring:** The `GET /api/v1/stats/storage` endpoint measures the filesystem hosting the parent directory of `THREAD_DB_PATH`. Both the database and git repos live on this filesystem — so the endpoint reflects the real disk headroom for all Thread data. No additional env var needed; the endpoint derives the path automatically.
+
 ### Logging & Debug
 
 | Variable | Default | Valid | Description |
@@ -57,6 +59,15 @@ Waitress uses native threads (one per worker). SQLite connections are pooled sep
 - **Workstation/Laptop**: `THREAD_POOL_SIZE=12` — default, handles bursty agent traffic
 - **Heavy concurrent agents**: `THREAD_POOL_SIZE=24` — needs ~300MB+ for SQLite page cache
 
+### Server-Sent Events (SSE)
+
+The `/api/v1/events` endpoint streams stats updates to the dashboard in real-time using SSE (text/event-stream).
+A background poller thread periodically queries the database and pushes results to all connected subscribers.
+
+| Variable | Default | Valid | Description |
+|----------|---------|-------|-------------|
+| `THREAD_SSE_POLL_INTERVAL` | `30` | ≥ 1 (seconds) | Seconds between each stats snapshot push via SSE. Lower = more real-time but more DB queries. |
+
 ---
 
 ## Caching
@@ -69,6 +80,34 @@ Thread has three in-process caches (no Redis, no memcached). All use stdlib — 
 | `THREAD_SEARCH_CACHE_SIZE` | `128` | ≥ 1 | Max cached FTS5 search results. Agents re-search same terms within seconds. |
 | `THREAD_SEARCH_CACHE_TTL` | `5` | ≥ 0 (seconds) | How long search results stay cached. 0 = disable cache. |
 | `THREAD_TAG_CACHE_TTL` | `30` | ≥ 0 (seconds) | How long tag lists stay cached. 0 = disable cache. Tags change only on entry mutations. |
+
+---
+
+## Authentication (Optional — Disabled by Default)
+
+Token-based auth using HMAC-SHA256 signed tokens and PBKDF2 password hashing. **No JWT library, no bcrypt.** Everything uses Python's stdlib (`hashlib`, `hmac`, `secrets`).
+
+Auth is **disabled** by default (`THREAD_AUTH_ENABLED=false`) — all API routes are open. When enabled, every API request (except `/api/v1/health` and `/api/v1/auth/login`) requires a `Authorization: Bearer <token>` header. The SSE `/api/v1/events` endpoint accepts tokens via `?token=` query param (EventSource cannot set headers).
+
+To enable auth:
+1. Generate a secret key: `python -c "from thread_server.auth import generate_secret_key; print(generate_secret_key())"`
+2. Generate a password hash: `python -m thread_server.cli.set_password`
+3. Set the env vars below
+
+| Variable | Default | Valid | Description |
+|----------|---------|-------|-------------|
+| `THREAD_AUTH_ENABLED` | `false` | `true`, `1`, `yes`, `false`, `0`, `no` | Enable Bearer token authentication for all API routes. |
+| `THREAD_AUTH_USERNAME` | `admin` | Non-empty string | Username for login. Single-user admin only — no multi-tenant. |
+| `THREAD_AUTH_PASSWORD_HASH` | `""` (empty) | PBKDF2 hash string | Hashed password. Use `python -m thread_server.cli.set_password` to generate. |
+| `THREAD_AUTH_SECRET_KEY` | `""` (empty) | 64 hex chars | HMAC-SHA256 signing key for tokens. Generate with `secrets.token_hex(32)`. |
+| `THREAD_AUTH_TOKEN_EXPIRY` | `86400` (24h) | ≥ 60 (seconds) | Token lifetime. After expiry, the client must re-login. |
+
+**Token format:** `base64(header).base64(payload).base64(signature)` where:
+- header: `{"alg":"HS256","typ":"THREAD"}`
+- payload: `{"sub":"<username>","iat":<unix>,"exp":<unix>}`
+- signature: `HMAC-SHA256(header.payload, secret_key)`
+
+**Password format:** `pbkdf2:sha256:600000$<salt>$<hash>` — 600K iterations, OWASP 2023 compliant.
 
 ---
 

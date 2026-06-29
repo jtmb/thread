@@ -1,0 +1,62 @@
+/* ── Print Stylesheet for PDF Export ────────────────────────────────────
+ *
+ * Hides navigation, buttons, and interactive elements. Formats content
+ * for clean, readable printed output. Used by the Export → PDF feature
+ * (which triggers window.print()).
+ */
+
+@media print {
+  /* Hide interactive UI */
+  .dashboard-nav,
+  button,
+  .btn,
+  [role="button"],
+  .toast,
+  #modal-root,
+  .action-buttons,
+  .priority-badge,
+  .tag-chip {
+    display: none !important;
+  }
+
+  /* Full-width content */
+  body {
+    margin: 0;
+    padding: 0;
+    color: #000;
+    background: #fff;
+  }
+
+  .container-fluid,
+  #app-root {
+    max-width: 100%;
+    padding: 0;
+  }
+
+  /* Entry cards: remove border accents, use page-break */
+  .entry-card {
+    border-left: none;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 1rem;
+    padding: 0.5rem 0;
+    break-inside: avoid;
+  }
+
+  .entry-content {
+    font-family: monospace;
+    font-size: 10pt;
+    line-height: 1.4;
+  }
+
+  /* Typography */
+  h1, h2, h3 { page-break-after: avoid; }
+  a { color: #000; text-decoration: underline; }
+  pre, code { font-family: monospace; background: none; }
+
+  /* Ensure links print readable */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 0.8em;
+    color: #666;
+  }
+}

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Thread — Context Server Dashboard">
+  <title>Thread Dashboard</title>
+
+  <!-- Vendored CSS (zero CDN dependencies) -->
+  <link rel="stylesheet" href="/dashboard/static/vendor/pico.min.css">
+  <link rel="stylesheet" href="/dashboard/static/css/app.css">
+  <link rel="stylesheet" href="/dashboard/static/css/print.css" media="print">
+
+  <link rel="icon" href="/dashboard/static/img/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <!-- Navigation bar — populated by router on load -->
+  <nav class="dashboard-nav container">
+    <a href="#/" class="nav-brand"><strong>🧵 Thread</strong></a>
+    <a href="#/">Dashboard</a>
+    <a href="#/search">Search</a>
+    <a href="#/upload">Upload</a>
+    <a href="#/settings">Settings</a>
+    <span class="nav-spacer"></span>
+    <span id="auth-status"></span>
+  </nav>
+
+  <!-- Main content area — views are mounted here -->
+  <main class="container" id="app-root">
+    <div class="loading" aria-busy="true">Loading…</div>
+  </main>
+
+  <!-- Modal portal — dialogs, confirmations, and keyboard help -->
+  <div id="modal-root"></div>
+
+  <!-- Vendored JS (zero CDN) -->
+  <script src="/dashboard/static/vendor/chart.min.js"></script>
+
+  <!-- Application JS modules -->
+  <script type="module">
+    import { init } from "/dashboard/static/js/router.js";
+    init();
+  </script>
+</body>
+</html>

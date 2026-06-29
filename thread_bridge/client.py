@@ -350,3 +350,12 @@ def get_stats() -> dict:
         timeout=config.THREAD_REQUEST_TIMEOUT,
     )
     return _handle_response(resp)
+
+
+def get_storage_stats() -> dict:
+    """Get filesystem storage capacity (free/used/total bytes)."""
+    resp = _get_session().get(
+        _url("/api/v1/stats/storage"),
+        timeout=config.THREAD_REQUEST_TIMEOUT,
+    )
+    return _handle_response(resp)

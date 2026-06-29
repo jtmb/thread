@@ -11,8 +11,8 @@ import logging
 
 from flask import Blueprint, g, jsonify, request
 
-from thread_server import config, models
-from thread_server.cache import search_cache, tag_cache
+from thread_server import config, models, cache
+
 
 logger = logging.getLogger(__name__)
 
@@ -68,12 +68,12 @@ def search_entries(name: str):
     cached = False
 
     # Check the search cache
-    if use_cache and search_cache and query:
-        cached_results = search_cache.get(g.session_id, query)
+    if use_cache and cache.search_cache and query:
+        cached_results = cache.search_cache.get(g.session_id, query)
         if cached_results is not None:
             cached = True
-            if search_cache:
-                search_cache.record_hit()
+            if cache.search_cache:
+                cache.search_cache.record_hit()
             return jsonify({
                 "results": cached_results,
                 "query": query,
@@ -82,15 +82,15 @@ def search_entries(name: str):
                 "cached": True,
             })
 
-    if search_cache:
-        search_cache.record_miss()
+    if cache.search_cache:
+        cache.search_cache.record_miss()
 
     # Execute the search
     results = models.search_entries(db, g.session_id, query, limit=limit)
 
     # Cache the results (even empty results are cached to absorb hammering)
-    if use_cache and search_cache and query:
-        search_cache.set(g.session_id, query, results)
+    if use_cache and cache.search_cache and query:
+        cache.search_cache.set(g.session_id, query, results)
 
     return jsonify({
         "results": results,
@@ -113,14 +113,14 @@ def get_tags(name: str):
     db = g.db
 
     # Check tag cache
-    if tag_cache:
-        cached_tags = tag_cache.get(g.session_id)
+    if cache.tag_cache:
+        cached_tags = cache.tag_cache.get(g.session_id)
         if cached_tags is not None:
             return jsonify({"tags": cached_tags, "session": name, "cached": True})
 
     tags = models.get_all_tags(db, g.session_id)
 
-    if tag_cache:
-        tag_cache.set(g.session_id, tags)
+    if cache.tag_cache:
+        cache.tag_cache.set(g.session_id, tags)
 
     return jsonify({"tags": tags, "session": name, "cached": False})

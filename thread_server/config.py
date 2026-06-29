@@ -48,6 +48,23 @@ MAX_BULK_SIZE: int = 100  # Max entries per bulk create request
 MAX_CONTENT_LENGTH: int = int(os.environ.get("THREAD_MAX_CONTENT_LENGTH", "100000"))  # 100KB max per entry content
 MAX_UPLOAD_SIZE: int = int(os.environ.get("THREAD_MAX_UPLOAD_SIZE", str(4 * 1024 * 1024)))  # 4MB max file upload
 
+# ── Frontend ──────────────────────────────────────────────────────────────────
+FRONTEND_DIR: str = os.environ.get("THREAD_FRONTEND_DIR", "thread_frontend")
+
+# ── Authentication ────────────────────────────────────────────────────────────
+# Disabled by default for backward compatibility with MCP bridge and curl scripts.
+# When enabled, all API routes (except /api/v1/health and /api/v1/auth/login)
+# require a valid Bearer token obtained via POST /api/v1/auth/login.
+AUTH_ENABLED: bool = os.environ.get("THREAD_AUTH_ENABLED", "false").lower() in ("true", "1", "yes")
+AUTH_USERNAME: str = os.environ.get("THREAD_AUTH_USERNAME", "admin")
+AUTH_PASSWORD_HASH: str = os.environ.get("THREAD_AUTH_PASSWORD_HASH", "")
+AUTH_SECRET_KEY: str = os.environ.get("THREAD_AUTH_SECRET_KEY", "")
+AUTH_TOKEN_EXPIRY: int = int(os.environ.get("THREAD_AUTH_TOKEN_EXPIRY", "86400"))  # 24 hours
+
+# ── SSE ───────────────────────────────────────────────────────────────────────
+# How often the background thread polls the database for stats updates.
+SSE_POLL_INTERVAL: int = int(os.environ.get("THREAD_SSE_POLL_INTERVAL", "30"))
+
 # ── Runtime State ─────────────────────────────────────────────────────────────
 # _start_time is set by stats_collector.record_request_start()
 _start_time: float = 0.0

@@ -26,7 +26,7 @@ class ConnectionPool:
         start(): Open all connections, apply pragmas, init schema.
         get(): Return current thread's connection (blocks if pool exhausted).
         close_all(): Close all connections (graceful shutdown).
-        active_count: Number of threads currently holding connections.
+        active_count: Number of live threads holding connections.
         total_connections: Total connections in the pool.
     """
 
@@ -43,8 +43,11 @@ class ConnectionPool:
         self._timeout = timeout
         self._local = threading.local()
         self._write_lock = threading.Lock()
-        self._semaphore = threading.BoundedSemaphore(max_connections)
+        # +1 for the main thread's bootstrap connection (permanent, used for schema init)
+        self._semaphore = threading.BoundedSemaphore(max_connections + 1)
         self._all_connections: list[sqlite3.Connection] = []
+        self._thread_connections: dict[int, sqlite3.Connection] = {}
+        self._thread_busy: set[int] = set()
         self._lock = threading.Lock()
 
     # ── Public API ─────────────────────────────────────────────────────────
@@ -56,11 +59,11 @@ class ConnectionPool:
         are ready and waiting — zero setup latency per request.
         """
         logger.info(
-            "Pre-warming connection pool: %d connections to %s",
-            self._max_connections,
+            "Pre-warming connection pool: %d connections (+1 bootstrap) to %s",
+            self._max_connections + 1,
             self._db_path,
         )
-        for i in range(self._max_connections):
+        for i in range(self._max_connections + 1):
             conn = sqlite3.connect(self._db_path, check_same_thread=False)
             conn.row_factory = sqlite3.Row
             for pragma in config.PRAGMAS:
@@ -96,6 +99,8 @@ class ConnectionPool:
                 self._semaphore.release()
                 raise RuntimeError("Connection pool not started — call pool.start() first")
             conn = self._all_connections.pop()
+            tid = threading.get_ident()
+            self._thread_connections[tid] = conn
 
         self._local.connection = conn
         return conn
@@ -125,13 +130,37 @@ class ConnectionPool:
 
     @property
     def active_count(self) -> int:
-        """Number of threads currently holding connections."""
-        return self._max_connections - self._semaphore._value
+        """Number of threads actively processing a request right now.
+
+        Only counts threads that have both acquired a connection AND are
+        currently inside a request handler (marked busy by Flask hooks).
+        Idle workers holding connections are not counted.
+        """
+        alive_ids = {t.ident for t in threading.enumerate() if t.ident is not None}
+        return sum(1 for tid in self._thread_connections if tid in alive_ids and tid in self._thread_busy)
 
     @property
     def total_connections(self) -> int:
-        """Total connections the pool can provide."""
-        return self._max_connections
+        """Total connections the pool can provide (workers + bootstrap)."""
+        return self._max_connections + 1
+
+    def mark_busy(self) -> None:
+        """Mark the current thread as actively processing a request.
+
+        Called by Flask's before_request hook. Thread-safe — set.add()
+        is atomic in CPython and contention on this set is negligible.
+        """
+        tid = threading.get_ident()
+        self._thread_busy.add(tid)
+
+    def mark_idle(self) -> None:
+        """Mark the current thread as no longer processing a request.
+
+        Called by Flask's after_request hook. Thread-safe for the same
+        reason as mark_busy().
+        """
+        tid = threading.get_ident()
+        self._thread_busy.discard(tid)
 
 
 # Module-level singleton — created at import time, started by create_app()

@@ -464,3 +464,42 @@ def test_stats_returns_200(client):
     assert "pool" in data
     assert "cache" in data
     assert "requests" in data
+
+
+def test_storage_stats_returns_200(client):
+    """GET /api/v1/stats/storage returns filesystem capacity + app footprint."""
+    resp = client.get("/api/v1/stats/storage")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    # Raw bytes (int, >= 0)
+    for field in ("free_bytes", "used_bytes", "total_bytes"):
+        assert isinstance(data[field], int)
+        assert data[field] >= 0
+    # Human-readable MB (int, >= 0)
+    for field in ("free_mb", "used_mb", "total_mb"):
+        assert isinstance(data[field], int)
+        assert data[field] >= 0
+    # Human-readable GB (float, 1 decimal, >= 0)
+    for field in ("free_gb", "used_gb", "total_gb"):
+        assert isinstance(data[field], (int, float))
+        assert data[field] >= 0
+    # Total must be at least the sum of free + used
+    assert data["total_bytes"] >= data["free_bytes"] + data["used_bytes"]
+    # MB and GB must be consistent with bytes
+    mb = 1024 * 1024
+    assert abs(data["free_mb"] - data["free_bytes"] // mb) <= 1
+    assert abs(data["total_mb"] - data["total_bytes"] // mb) <= 1
+    # App footprint — must be non-negative and <= filesystem used
+    for field in ("app_used_bytes", "app_used_mb", "app_used_gb"):
+        assert field in data
+        assert data[field] >= 0
+    assert data["app_used_bytes"] <= data["used_bytes"]
+    assert abs(data["app_used_mb"] - data["app_used_bytes"] // mb) <= 1
+
+
+def test_storage_stats_no_params(client):
+    """GET /api/v1/stats/storage works without any query parameters."""
+    resp = client.get("/api/v1/stats/storage")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["total_bytes"] > 0  # Filesystem always has some total

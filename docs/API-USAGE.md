@@ -78,6 +78,47 @@ Server performance metrics.
 }
 ```
 
+### `GET /api/v1/stats/storage`
+
+Filesystem storage capacity for the Thread data directory. Measures the filesystem hosting the database and git repos via a single `statvfs` syscall — fast and always available.
+
+No query parameters required.
+
+**Response (200):**
+```json
+{
+  "free_bytes": 934751633408,
+  "used_bytes": 91357188096,
+  "total_bytes": 1081101176832,
+  "free_mb": 891394,
+  "used_mb": 87125,
+  "total_mb": 1031036,
+  "free_gb": 870.5,
+  "used_gb": 85.1,
+  "total_gb": 1006.9,
+  "app_used_bytes": 52428800,
+  "app_used_mb": 50,
+  "app_used_gb": 0.0
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `free_bytes` | int | Available bytes on the filesystem |
+| `used_bytes` | int | Used bytes on the filesystem (everything, not just Thread) |
+| `total_bytes` | int | Total filesystem capacity in bytes |
+| `free_mb` | int | Available megabytes (bytes ÷ 1,048,576, rounded) |
+| `used_mb` | int | Used megabytes |
+| `total_mb` | int | Total megabytes |
+| `free_gb` | float | Available gigabytes (1 decimal place) |
+| `used_gb` | float | Used gigabytes (1 decimal place) |
+| `total_gb` | float | Total gigabytes (1 decimal place) |
+| `app_used_bytes` | int | Thread's own footprint — database + WAL + git repos |
+| `app_used_mb` | int | Thread's footprint in megabytes |
+| `app_used_gb` | float | Thread's footprint in gigabytes (1 decimal place) |
+
+> **Tip:** `used_bytes` shows everything on the filesystem; `app_used_bytes` isolates Thread's share. If `app_used` is growing much faster than your entry rate, check git repo sizes (`du -sh data/git/*/`).
+
 ---
 
 ## Sessions

@@ -235,6 +235,14 @@ TOOLS = [
         },
     },
     {
+        "name": "thread_get_storage",
+        "description": "Get filesystem storage capacity for the Thread data directory. Returns free_bytes, used_bytes, and total_bytes — use to monitor disk headroom before uploading large transcripts or documents.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
         "name": "thread_bulk_create_entries",
         "description": "Create multiple entries at once (up to 100). Returns created/failed counts with per-entry details.",
         "inputSchema": {
@@ -414,6 +422,8 @@ def handle_tool_call(name: str, args: dict[str, Any]) -> Any:
             return api_client.get_tags(_session(args))
         elif name == "thread_get_stats":
             return api_client.get_stats()
+        elif name == "thread_get_storage":
+            return api_client.get_storage_stats()
         elif name == "thread_bulk_create_entries":
             return api_client.bulk_create_entries(
                 _session(args),

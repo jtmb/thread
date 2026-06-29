@@ -103,7 +103,7 @@ curl "http://localhost:5000/api/v1/sessions/demo/search?q=ranking"
 - **WAL mode** — Writers never block readers, concurrent read throughput scales with threads
 
 ### Data Integrity
-- **Git versioning** — Auto-commit on every mutation with meaningful messages (`session(demo): added entry(42)`)
+- **Git versioning** — Auto-commit on every mutation with meaningful messages (`session(demo): added entry(42)`) · [full docs](./docs/GIT-VERSIONING.md)
 - **Atomic writes** — Write lock held only for INSERT/UPDATE/DELETE (~1-5ms), never during reads
 
 ### AI Agent Integration
@@ -185,6 +185,7 @@ Once connected, copy [`.github/skills/thread-auto-context/`](./.github/skills/th
 | [`docs/TECH-STACK.md`](./docs/TECH-STACK.md) | Dependencies, versions, rationale, memory budget |
 | [`docs/DEPLOYMENT.md`](./docs/DEPLOYMENT.md) | Raspberry Pi setup, systemd service, firewall, troubleshooting |
 | [`docs/CONVENTIONS.md`](./docs/CONVENTIONS.md) | Coding conventions, naming, patterns, VS Code metadata layout |
+| [`docs/GIT-VERSIONING.md`](./docs/GIT-VERSIONING.md) | Per-session Git repos, auto-commit lifecycle, browsing history, troubleshooting |
 | [`docs/MCP-VSCODE-COPILOT.md`](./docs/MCP-VSCODE-COPILOT.md) | Full VS Code Copilot MCP integration guide |
 | [`docs/MCP-CLINE.md`](./docs/MCP-CLINE.md) | Full Cline MCP integration guide |
 | [`AGENTS.md`](./AGENTS.md) | Project rules for contributors |

@@ -130,6 +130,8 @@ def test_no_print_statements_in_production_code():
 
     violations = []
     for root, _dirs, files in _os.walk(source_dir):
+        # Skip CLI tools — they legitimately use print() for user output
+        _dirs[:] = [d for d in _dirs if d not in ("cli", "__pycache__")]
         for fname in files:
             if not fname.endswith(".py"):
                 continue
