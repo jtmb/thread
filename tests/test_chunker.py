@@ -1,10 +1,13 @@
 """Unit tests for document chunking logic (chunker.py)."""
 
+import json
+
 import pytest
 
 from thread_server.chunker import (
-    DEFAULT_CHUNK_SIZE,
     chunk_by_format,
+    chunk_cline_messages,
+    chunk_jsonl,
     chunk_markdown,
     chunk_plaintext,
     detect_format,
@@ -182,6 +185,236 @@ def test_parse_json_entries_not_list():
     """'entries' not being a list raises ValueError."""
     with pytest.raises(ValueError):
         parse_json_entries('{"entries": "not a list"}')
+
+
+# ── JSONL Chunking ────────────────────────────────────────────────────────────
+
+
+def test_detect_format_jsonl():
+    """Files with .jsonl extension are detected as jsonl."""
+    assert detect_format("transcript.jsonl") == "jsonl"
+    assert detect_format("path/to/archive.JSONL") == "jsonl"
+
+
+def test_chunk_jsonl_single_line():
+    """A single JSONL line produces one chunk with role+content."""
+    text = '{"role": "user", "content": "How do I containerize this?"}'
+    chunks = chunk_jsonl(text)
+    assert len(chunks) == 1
+    assert chunks[0].content == "**user**: How do I containerize this?"
+    assert chunks[0].index == 0
+
+
+def test_chunk_jsonl_multi_line():
+    """Multiple JSONL lines produce one chunk per conversational turn."""
+    text = (
+        '{"role": "user", "content": "Build a container"}\n'
+        '{"role": "assistant", "content": "Here is how..."}\n'
+        '{"role": "user", "content": "Thanks!"}'
+    )
+    chunks = chunk_jsonl(text)
+    assert len(chunks) == 3
+    assert chunks[0].content == "**user**: Build a container"
+    assert chunks[1].content == "**assistant**: Here is how..."
+    assert chunks[2].content == "**user**: Thanks!"
+    assert [c.index for c in chunks] == [0, 1, 2]
+
+
+def test_chunk_jsonl_skips_empty_lines():
+    """Empty and whitespace-only lines are skipped."""
+    text = (
+        '{"role": "user", "content": "One"}\n'
+        '\n'
+        '   \n'
+        '{"role": "assistant", "content": "Two"}'
+    )
+    chunks = chunk_jsonl(text)
+    assert len(chunks) == 2
+    assert [c.content for c in chunks] == [
+        "**user**: One",
+        "**assistant**: Two",
+    ]
+
+
+def test_chunk_jsonl_skips_malformed():
+    """Malformed JSON lines are skipped with no exception raised."""
+    text = (
+        '{"role": "user", "content": "Valid"}\n'
+        'not json at all\n'
+        '{"role": "assistant", "content": "Also valid"}'
+    )
+    chunks = chunk_jsonl(text)
+    assert len(chunks) == 2
+    assert chunks[0].content == "**user**: Valid"
+    assert chunks[1].content == "**assistant**: Also valid"
+
+
+def test_chunk_jsonl_empty_input():
+    """Empty or whitespace-only input returns empty list."""
+    assert chunk_jsonl("") == []
+    assert chunk_jsonl("   ") == []
+    assert chunk_jsonl("\n\n") == []
+
+
+def test_chunk_by_format_dispatches_jsonl():
+    """chunk_by_format with jsonl dispatches to chunk_jsonl."""
+    text = '{"role": "user", "content": "Dispatch test"}'
+    chunks = chunk_by_format(text, "jsonl")
+    assert len(chunks) == 1
+    assert chunks[0].content == "**user**: Dispatch test"
+
+
+def test_chunk_jsonl_transcript_user_message():
+    """Copilot transcript user.message entries are extracted from data.content."""
+    text = json.dumps({
+        "type": "user.message",
+        "data": {"content": "How do I deploy this?"},
+        "id": "abc",
+        "timestamp": "2026-01-01T00:00:00Z",
+    })
+    chunks = chunk_jsonl(text)
+    assert len(chunks) == 1
+    assert chunks[0].content == "**user**: How do I deploy this?"
+
+
+def test_chunk_jsonl_transcript_assistant_message():
+    """Copilot transcript assistant.message entries are extracted."""
+    text = json.dumps({
+        "type": "assistant.message",
+        "data": {
+            "content": "Here's the deployment plan.",
+            "toolRequests": [{"name": "read_file"}],
+            "reasoningText": "The user needs a Dockerfile."
+        },
+    })
+    chunks = chunk_jsonl(text)
+    assert len(chunks) == 1
+    assert chunks[0].content == "**assistant**: Here's the deployment plan."
+
+
+def test_chunk_jsonl_transcript_skips_non_messages():
+    """Session start, turn boundaries, and tool executions are skipped."""
+    lines = [
+        json.dumps({"type": "session.start", "data": {}}),
+        json.dumps({"type": "assistant.turn_start", "data": {"turnId": "0"}}),
+        json.dumps({"type": "assistant.turn_end", "data": {"turnId": "0"}}),
+        json.dumps({"type": "function", "data": {"name": "read_file"}}),
+        json.dumps({"type": "tool.execution_start", "data": {}}),
+        json.dumps({"type": "tool.execution_complete", "data": {}}),
+        json.dumps({"type": "user.message", "data": {"content": "Only this one"}}),
+    ]
+    chunks = chunk_jsonl("\n".join(lines))
+    assert len(chunks) == 1
+    assert chunks[0].content == "**user**: Only this one"
+
+
+def test_chunk_jsonl_transcript_mixed_with_simple():
+    """Transcript lines and simple role/content lines coexist."""
+    text = (
+        json.dumps({"type": "user.message", "data": {"content": "Transcript msg"}}) + "\n"
+        + json.dumps({"role": "user", "content": "Simple msg"})
+    )
+    chunks = chunk_jsonl(text)
+    assert len(chunks) == 2
+    assert chunks[0].content == "**user**: Transcript msg"
+    assert chunks[1].content == "**user**: Simple msg"
+
+
+# ── Cline Messages Chunking ────────────────────────────────────────────────────
+
+
+def test_detect_format_cline_messages():
+    """Files ending in .messages.json are detected as cline_messages."""
+    assert detect_format("session.messages.json") == "cline_messages"
+    assert detect_format("path/to/1781052201659_55vq3.messages.json") == "cline_messages"
+
+
+def test_chunk_cline_messages_text_only():
+    """User + assistant text turns are extracted with role headers."""
+    text = json.dumps({
+        "version": 1,
+        "messages": [
+            {"role": "user", "content": [
+                {"type": "text", "text": "Write hello.py"}
+            ]},
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "I'll create the file."}
+            ]},
+        ],
+    })
+    chunks = chunk_cline_messages(text)
+    assert len(chunks) == 2
+    assert chunks[0].content == "**user**: Write hello.py"
+    assert chunks[1].content == "**assistant**: I'll create the file."
+
+
+def test_chunk_cline_messages_with_tool_use():
+    """Tool use and tool result blocks are extracted with markers."""
+    text = json.dumps({
+        "version": 1,
+        "messages": [
+            {"role": "assistant", "content": [
+                {"type": "text", "text": "Let me check that."},
+                {"type": "tool_use", "id": "42", "name": "read_file",
+                 "input": {"filePath": "/tmp/test.py"}},
+                {"type": "tool_result", "tool_use_id": "42", "name": "read_file",
+                 "content": "print('hello')"},
+            ]},
+        ],
+    })
+    chunks = chunk_cline_messages(text)
+    assert len(chunks) == 1
+    content = chunks[0].content
+    assert "**assistant**" in content
+    assert "Let me check that." in content
+    assert "[tool_use: read_file]" in content
+    assert "[tool_result: read_file]" in content
+    assert "print('hello')" in content
+
+
+def test_chunk_cline_messages_skips_thinking():
+    """Thinking blocks are omitted from extracted content."""
+    text = json.dumps({
+        "version": 1,
+        "messages": [
+            {"role": "assistant", "content": [
+                {"type": "thinking", "thinking": "The user wants a greeting."},
+                {"type": "text", "text": "Hello, world!"},
+            ]},
+        ],
+    })
+    chunks = chunk_cline_messages(text)
+    assert len(chunks) == 1
+    assert chunks[0].content == "**assistant**: Hello, world!"
+    assert "thinking" not in chunks[0].content
+    assert "The user wants" not in chunks[0].content
+
+
+def test_chunk_cline_messages_invalid_json():
+    """Malformed JSON raises ValueError."""
+    with pytest.raises(ValueError, match="Invalid Cline messages JSON"):
+        chunk_cline_messages("not json at all")
+
+
+def test_chunk_cline_messages_missing_messages():
+    """JSON object missing 'messages' key raises ValueError."""
+    with pytest.raises(ValueError, match="missing 'messages' key"):
+        chunk_cline_messages('{"version": 1}')
+
+
+def test_chunk_by_format_dispatches_cline():
+    """chunk_by_format with cline_messages dispatches to chunk_cline_messages."""
+    text = json.dumps({
+        "version": 1,
+        "messages": [
+            {"role": "user", "content": [
+                {"type": "text", "text": "Dispatch test"}
+            ]},
+        ],
+    })
+    chunks = chunk_by_format(text, "cline_messages")
+    assert len(chunks) == 1
+    assert chunks[0].content == "**user**: Dispatch test"
 
 
 # ── chunk_by_format Dispatcher ─────────────────────────────────────────────────

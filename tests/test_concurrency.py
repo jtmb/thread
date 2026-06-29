@@ -7,7 +7,6 @@ and concurrent FTS5 searches under WAL mode.
 import threading
 import time
 
-import pytest
 
 from thread_server import models
 

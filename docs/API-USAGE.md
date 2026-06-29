@@ -333,7 +333,7 @@ Bulk create — create up to 100 entries in a single request.
 
 ### `POST /api/v1/sessions/<name>/entries/upload`
 
-Upload and chunk a file into entries. Supports Markdown (`.md`), plain text (`.txt`), and JSON (`.json`).
+Upload and chunk a file into entries. Supports Markdown (`.md`), plain text (`.txt`), JSON (`.json`), JSONL (`.jsonl`), and Cline messages (`.messages.json`).
 
 **Request:** `multipart/form-data`
 
@@ -343,6 +343,10 @@ Upload and chunk a file into entries. Supports Markdown (`.md`), plain text (`.t
 | `tags` | string | no | `""` | Comma-separated tags applied to all created entries |
 | `priority` | integer | no | `5` | Priority 0-10 for all created entries |
 | `chunk_size` | integer | no | `2048` | Target chunk size in chars (plain text only) |
+| `offset` | integer | no | `0` | Byte offset to start reading from. Used for incremental re-uploads of growing files (e.g. conversation transcripts). The server auto-tracks the last offset per session+filename, so subsequent uploads only import new lines. |
+
+**Incremental upload behavior:**
+When `offset` > 0 (or per the tracked `file_uploads` record), the upload skips to the next newline after the offset, then chunks and imports only the new content. This prevents duplicate entries when re-uploading a growing transcript file. The response includes `byte_offset` (the file position after import) and `skipped_bytes` (bytes skipped due to offset alignment). Passing the same `byte_offset` on the next upload with unchanged content returns 0 entries.
 
 **Chunking by format:**
 | Format | Strategy |
@@ -350,6 +354,8 @@ Upload and chunk a file into entries. Supports Markdown (`.md`), plain text (`.t
 | Markdown | Split at `##` headings; each section = one entry |
 | Plain text | Split at paragraph boundaries; merge short paragraphs |
 | JSON | Expects `{"entries": [...]}` — imported as-is |
+| JSONL | Split line-by-line; `role` + `content` extracted into formatted entries (one per conversational turn) |
+| Cline Messages | Parse nested `messages[]` array; text, tool_use, and tool_result content blocks extracted per turn; thinking blocks skipped |
 
 **Response (201):**
 ```json
@@ -360,10 +366,14 @@ Upload and chunk a file into entries. Supports Markdown (`.md`), plain text (`.t
   "entries_created": 12,
   "entries": [
     {"id": 1, "content": "# Architecture\n\n...", "tags": ["architecture.md"], ...}
-  ]
+  ],
+  "byte_offset": 5432,
+  "skipped_bytes": 0
 }
 ```
 The source filename is automatically added as a tag to every created entry.
+`byte_offset` is the file position after ingestion — use it as `offset` for the next incremental upload.
+`skipped_bytes` is non-zero only when an offset landed mid-line and bytes were skipped to align at the next newline.
 
 **Errors:**
 | Status | Code | Condition |

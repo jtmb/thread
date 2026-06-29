@@ -1,0 +1,78 @@
+# Secrets — never in the build context
+.env
+.env.*
+*.key
+*.pem
+secrets/
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+.python-version
+*.egg-info/
+
+# Runtime data (volume-mounted at runtime, not baked in)
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Build artifacts
+dist/
+build/
+*.whl
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+.mypy_cache/
+
+# Docs — not needed at runtime
+*.md
+docs/
+
+# Dev tooling — not needed at runtime
+.github/
+.vscode/
+.editorconfig
+
+# IDE
+.idea/
+.DS_Store
+Thumbs.db
+*~
+
+# Bridge — separate service, not in server container
+thread_bridge/
+
+# Tests
+tests/
+
+# Deploy scripts — for bare-metal, not containers
+deploy/
+
+# Logs
+*.log
+
+# Temporary / backup files
+*.bak
+*.orig
+*.tmp
+*.swp
+*.swo
+
+# macOS resource forks
+._*

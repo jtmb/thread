@@ -5,10 +5,11 @@
 [![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?style=flat-square&logo=sqlite&logoColor=white)](https://sqlite.org/fts5.html)
 [![Tests](https://img.shields.io/badge/tests-124%20passed-success?style=flat-square)](./tests/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?style=flat-square&logo=docker&logoColor=white)](https://hub.docker.com/)
 
 **Persistent memory for AI coding agents** — a self-hosted context server purpose-built to be as light weight as possible and dependency free. This makes it easy to run on smaller factor and older hardware. Give VS Code Copilot and Cline long-term memory, full-text search, and git-versioned entries across every conversation.
 
-[Overview](#overview) • [Quick Start](#quick-start) • [Features](#features) • [MCP Setup](#mcp-setup) • [Documentation](#documentation) • [Performance](#performance)
+[Overview](#overview) • [Quick Start](#quick-start) • [Features](#features) • [MCP Setup](#mcp-setup) • [Running](#running) • [Documentation](#documentation) • [Performance](#performance)
 
 ---
 
@@ -39,9 +40,15 @@ graph LR
 
 ## Quick Start
 
+**Docker (fastest)**:
 ```bash
-# Clone and install
-git clone https://github.com/your-org/thread.git && cd thread
+git clone https://github.com/jtmb/thread.git && cd thread
+docker compose up -d
+```
+
+**Bare metal**:
+```bash
+git clone https://github.com/jtmb/thread.git && cd thread
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r thread_server/requirements.txt
 pip install -r thread_bridge/requirements.txt
@@ -76,7 +83,7 @@ curl "http://localhost:5000/api/v1/sessions/demo/search?q=ranking"
 ### Why Thread?
 
 - **Agents that remember**. Copilot and Cline reset every session. Thread gives them persistent memory — your preferences, project decisions, and hard-won debugging insights carry forward automatically.
-- **Feed it your own documents**. Drop in markdown notes, plain-text logs, JSON exports, or any `.md`/`.txt`/`.json` file — Thread auto-chunks them into searchable entries. Point the CLI import tool at a directory and walk away.
+- **Feed it your own documents**. Drop in markdown notes, plain-text logs, JSON exports, AI conversation transcripts (Copilot `.jsonl`, Cline `.messages.json`), or any `.md`/`.txt`/`.json`/`.jsonl` file — Thread auto-chunks them into searchable entries. Point the CLI import tool at a directory and walk away.
 - **Runs on anything**. Zero external dependencies beyond Python and SQLite (both built into Raspberry Pi OS). A Pi 3B with 1GB RAM handles it comfortably. No Docker, no Postgres, no cloud bill.
 - **Instant full-text search**. Every word across every entry in every session is indexed with FTS5. Prefix queries, phrase matching, boolean negation — find anything in under 50ms.
 - **Git-backed history**. Every create, update, and delete commits to a per-session git repo. Roll back mistakes, audit what changed, or diff your agent's context over time.
@@ -87,7 +94,7 @@ curl "http://localhost:5000/api/v1/sessions/demo/search?q=ranking"
 - **Full CRUD** — Sessions and entries with cursor pagination
 - **FTS5 Search** — BM25 relevance ranking, prefix queries, phrase matching, boolean negation
 - **Bulk operations** — Create up to 100 entries in one call, partial failure reporting (207 Multi-Status)
-- **Document ingestion** — Upload `.md`/`.txt`/`.json` files and auto-chunk by headings or paragraphs
+- **Document ingestion** — Upload `.md`/`.txt`/`.json`/`.jsonl`/`.messages.json` files and auto-chunk by headings, paragraphs, conversational turns, or Cline message blocks. Incremental upload support — re-upload a growing file and only new content is imported, no duplicates.
 - **Performance stats** — `/api/v1/stats` with pool utilization, cache hit rates, p99 latency
 
 ### Performance
@@ -206,7 +213,24 @@ Once connected, copy [`.github/skills/thread-auto-context/`](./.github/skills/th
 | requests | 2.31+ | Bridge only, `pip install -r thread_bridge/requirements.txt` |
 | Git | any | For per-session versioning (optional — server runs without it) |
 
-## Running on a Pi
+## Running
+
+### Docker (any platform — amd64, arm64, armv7)
+
+```bash
+git clone https://github.com/jtmb/thread.git && cd thread
+docker compose up -d
+
+# Verify
+curl http://localhost:5000/api/v1/health
+```
+
+Data persists in a named volume — survives rebuilds, upgrades, and restarts. Override config via environment variables in `docker-compose.yml` or a `.env` file.
+
+> [!TIP]
+> Works on Raspberry Pi 3/4/5, cloud VMs, and your workstation. Same image, same command.
+
+### Bare Metal (Raspberry Pi)
 
 ```bash
 # The deploy directory has everything:

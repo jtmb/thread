@@ -256,18 +256,23 @@ Cline calls `thread_list_sessions` and shows all session names, descriptions, an
 
 ## Automatic Context
 
-The bridge auto-creates your default session when Cline connects — you'll see it in `thread_list_sessions` immediately. No manual setup needed.
+The `thread-auto-context` skill (`alwaysApply: true`) makes context saving automatic — no setup files required. When an agent connects to a workspace with the skill, it:
 
-For **automatic context saving**, copy the skill to your project:
+1. **Bootstraps the bridge** — downloads the 5 bridge files from `jtmb/thread` main on GitHub, creates a self-contained venv at `.vscode/thread-bridge/`, installs `requests`, and writes `.vscode/mcp.json` — zero manual steps
+2. **Searches Thread automatically** with every user question to surface relevant past context
+3. **Saves decisions, preferences, and constraints** during the session
+4. **Saves a summary** at session end
 
-1. Copy [`.github/skills/thread-auto-context/`](../.github/skills/thread-auto-context/) to your project's `.github/skills/`
-2. Add (or update) [`.github/copilot-instructions.md`](../.github/copilot-instructions.md) — a minimal stub that tells the agent to load the skill
+To enable this in any project, **just copy the skill directory**:
 
-This tells Cline-compatible agents to:
+```bash
+# From the Thread repo:
+cp -r .github/skills/thread-auto-context/ /path/to/your-project/.github/skills/
+```
 
-- Search Thread for relevant context at the start of every session
-- Save important decisions, preferences, and constraints automatically
-- Save a session summary at the end
+The skill's frontmatter (`alwaysApply: true`) tells the agent to load it automatically — no `.github/copilot-instructions.md` stub needed.
+
+**Without this skill**, agents only use Thread when you explicitly ask.
 
 ## Limitations
 

@@ -17,7 +17,6 @@ from thread_server.chunker import (
     chunk_by_format,
     detect_format,
     is_binary,
-    parse_json_entries,
 )
 from thread_server.git_manager import git_manager
 
@@ -346,12 +345,64 @@ def upload_file(name: str):
         return _error(413, "TOO_LARGE", f"File exceeds max upload size of {config.MAX_UPLOAD_SIZE // 1024 // 1024}MB")
 
     # Detect binary files
-    if is_binary(content_bytes):
+    if is_binary(content_bytes[:8192]):
         return _error(415, "UNSUPPORTED_MEDIA", "Binary files are not supported")
 
-    # Decode text
+    # ── Incremental upload: skip already-imported bytes ──
+    offset_str = request.form.get("offset", "")
+    if offset_str:
+        try:
+            offset = int(offset_str)
+        except ValueError:
+            return _error(400, "VALIDATION", "offset must be an integer")
+    else:
+        # Auto-resolve from tracked file offset (incremental re-uploads)
+        tracked = models.get_file_offset(g.db, g.session_id, uploaded.filename)
+        offset = tracked if tracked is not None else 0
+
+    if offset < 0:
+        return _error(400, "VALIDATION", "offset must be >= 0")
+    if offset > len(content_bytes):
+        return _error(400, "VALIDATION", "offset exceeds file size")
+
+    # If there's nothing new, return early
+    if offset == len(content_bytes):
+        return jsonify({
+            "filename": uploaded.filename,
+            "format": detect_format(uploaded.filename),
+            "chunks": 0,
+            "entries_created": 0,
+            "entries": [],
+            "byte_offset": offset,
+            "skipped_bytes": 0,
+        }), 201
+
+    # Slice from offset. When a manual offset is provided, skip to the next
+    # newline boundary so we never start mid-line. Auto-tracked offsets always
+    # land at clean boundaries (end of last ingested byte).
+    skipped = 0
+    if offset > 0 and offset_str:
+        remaining = content_bytes[offset:]
+        nl_pos = remaining.find(b"\n")
+        if nl_pos >= 0:
+            skipped = nl_pos + 1  # skip the partial line + its newline
+            remaining = remaining[skipped:]
+        else:
+            return jsonify({
+                "filename": uploaded.filename,
+                "format": detect_format(uploaded.filename),
+                "chunks": 0,
+                "entries_created": 0,
+                "entries": [],
+                "byte_offset": offset,
+                "skipped_bytes": len(remaining),
+            }), 201
+    else:
+        remaining = content_bytes[offset:]
+
+    # Decode the new portion
     try:
-        text = content_bytes.decode("utf-8")
+        text = remaining.decode("utf-8")
     except UnicodeDecodeError:
         return _error(415, "UNSUPPORTED_MEDIA", "File must be UTF-8 encoded text")
 
@@ -412,10 +463,25 @@ def upload_file(name: str):
         for entry in created_entries:
             git_manager.commit_entry_added(name, entry["id"])
 
+    # Track byte offset for incremental re-uploads
+    new_offset = len(content_bytes)
+    try:
+        models.upsert_file_offset(
+            g.db,
+            g.session_id,
+            uploaded.filename,
+            byte_offset=new_offset,
+            entries_created=len(created_entries),
+        )
+    except Exception:
+        logger.warning("Failed to persist file offset for %s", uploaded.filename, exc_info=True)
+
     return jsonify({
         "filename": uploaded.filename,
         "format": fmt,
         "chunks": len(chunks),
         "entries_created": len(created_entries),
         "entries": created_entries,
+        "byte_offset": new_offset,
+        "skipped_bytes": skipped if offset > 0 else 0,
     }), 201

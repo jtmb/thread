@@ -9,7 +9,6 @@ Performance:
 - Search includes cache=false option for agents needing fresh results
 """
 
-import json
 import logging
 import os
 from typing import Any
@@ -306,7 +305,7 @@ def upload_file(
     """Upload and chunk a local file to the server.
 
     Reads the file from disk and sends it as multipart/form-data.
-    The server detects format (.md/.txt/.json), chunks, and creates entries.
+    The server detects format (.md/.txt/.json/.jsonl/.messages.json), chunks, and creates entries.
 
     Args:
         session: Session name.

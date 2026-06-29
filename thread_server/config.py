@@ -25,13 +25,13 @@ SQLITE_CACHE_SIZE: int = -100_000
 # 256MB memory-mapped I/O bypasses read() syscalls — critical for FTS5 speed
 SQLITE_MMAP_SIZE: int = 268_435_456
 PRAGMAS: list[str] = [
-    f"PRAGMA journal_mode = WAL",
-    f"PRAGMA synchronous = NORMAL",
+    "PRAGMA journal_mode = WAL",
+    "PRAGMA synchronous = NORMAL",
     f"PRAGMA cache_size = {SQLITE_CACHE_SIZE}",
     f"PRAGMA mmap_size = {SQLITE_MMAP_SIZE}",
-    f"PRAGMA temp_store = MEMORY",
-    f"PRAGMA foreign_keys = ON",
-    f"PRAGMA busy_timeout = 5000",
+    "PRAGMA temp_store = MEMORY",
+    "PRAGMA foreign_keys = ON",
+    "PRAGMA busy_timeout = 5000",
 ]
 
 # ── Caching ───────────────────────────────────────────────────────────────────

@@ -3,7 +3,6 @@
 Tests use mock responses to avoid requiring a running server.
 """
 
-import json
 
 import pytest
 import requests

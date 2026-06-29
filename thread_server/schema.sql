@@ -72,3 +72,18 @@ CREATE TRIGGER IF NOT EXISTS entries_au AFTER UPDATE ON entries BEGIN
     INSERT INTO entries_fts(rowid, content, tags, session_id, priority, created_at)
     VALUES (new.id, new.content, new.tags, new.session_id, new.priority, new.created_at);
 END;
+
+-- File uploads: track byte offset per session+filename for incremental re-upload.
+-- Agents re-upload the same growing transcript file; this table prevents duplicates
+-- by remembering where the last chunk ended.
+CREATE TABLE IF NOT EXISTS file_uploads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    byte_offset INTEGER NOT NULL DEFAULT 0,
+    entries_created INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+    UNIQUE(session_id, filename)
+);

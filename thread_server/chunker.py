@@ -5,7 +5,7 @@ format-aware strategies. Shared by the POST /upload endpoint and the
 CLI import tool.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import json
 import logging
 import re
@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 FORMAT_MARKDOWN = "markdown"
 FORMAT_TEXT = "text"
 FORMAT_JSON = "json"
+FORMAT_JSONL = "jsonl"
+FORMAT_CLINE_MESSAGES = "cline_messages"
+
+# Max chars for tool_result content in Cline messages (avoids 100KB chunks)
+_CLINE_TOOL_RESULT_MAX = 500
 
 # Binary detection: reject files with null bytes in the first 1024 bytes
 _BINARY_THRESHOLD = 1024
@@ -54,7 +59,8 @@ def detect_format(filename: str) -> str:
         filename: The uploaded filename or file path.
 
     Returns:
-        One of FORMAT_MARKDOWN, FORMAT_TEXT, or FORMAT_JSON.
+        One of FORMAT_MARKDOWN, FORMAT_TEXT, FORMAT_JSON, FORMAT_JSONL,
+        or FORMAT_CLINE_MESSAGES.
 
     Raises:
         ValueError: If the format is not supported.
@@ -64,6 +70,10 @@ def detect_format(filename: str) -> str:
         return FORMAT_MARKDOWN
     if lower.endswith(".txt") or lower.endswith(".text"):
         return FORMAT_TEXT
+    if lower.endswith(".jsonl"):
+        return FORMAT_JSONL
+    if lower.endswith(".messages.json"):
+        return FORMAT_CLINE_MESSAGES
     if lower.endswith(".json"):
         return FORMAT_JSON
     raise ValueError(f"Unsupported file format: {filename}")
@@ -78,7 +88,8 @@ def chunk_by_format(
 
     Args:
         text: The full file content as a string.
-        fmt: One of FORMAT_MARKDOWN, FORMAT_TEXT, FORMAT_JSON.
+        fmt: One of FORMAT_MARKDOWN, FORMAT_TEXT, FORMAT_JSON, FORMAT_JSONL,
+            FORMAT_CLINE_MESSAGES.
         chunk_size: Target chunk size in characters (plaintext only).
 
     Returns:
@@ -94,6 +105,10 @@ def chunk_by_format(
     elif fmt == FORMAT_JSON:
         chunks = parse_json_entries(text)
         return [Chunk(content=c["content"], index=i) for i, c in enumerate(chunks)]
+    elif fmt == FORMAT_JSONL:
+        return chunk_jsonl(text)
+    elif fmt == FORMAT_CLINE_MESSAGES:
+        return chunk_cline_messages(text)
     raise ValueError(f"Unknown format: {fmt}")
 
 
@@ -306,6 +321,177 @@ def _chunk_by_sentences(text: str, chunk_size: int) -> list[Chunk]:
 
     if buffer:
         chunks.append(Chunk(content=" ".join(buffer), index=len(chunks)))
+
+    return chunks
+
+
+# ── Cline Messages Chunking ─────────────────────────────────────────────────────
+
+
+def chunk_cline_messages(text: str) -> list[Chunk]:
+    """Split a Cline .messages.json file into one entry per conversational turn.
+
+    Cline stores conversations as a single JSON object with a ``messages`` array.
+    Each message has a ``role`` and a ``content`` array of typed blocks
+    (text, thinking, tool_use, tool_result).  Thinking blocks are skipped;
+    tool results are truncated to avoid giant entries from file reads.
+
+    Expected format::
+
+        {"version": 1, "messages": [
+            {"role": "user", "content": [
+                {"type": "text", "text": "Write hello.py"}
+            ]},
+            {"role": "assistant", "content": [
+                {"type": "thinking", "thinking": "..."},
+                {"type": "text", "text": "I'll create the file."},
+                {"type": "tool_use", "id": "42", "name": "editor", "input": {...}}
+            ]},
+            {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": "42",
+                 "name": "editor", "content": "File created."}
+            ]}
+        ]}
+
+    Args:
+        text: Raw JSON string of a Cline .messages.json file.
+
+    Returns:
+        List of Chunk objects. Empty list if no extractable content.
+
+    Raises:
+        ValueError: If the JSON is invalid or missing the ``messages`` key.
+    """
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid Cline messages JSON: {e}") from e
+
+    if not isinstance(data, dict):
+        raise ValueError("Cline messages file must be a JSON object")
+
+    messages = data.get("messages")
+    if messages is None:
+        raise ValueError("Cline messages file missing 'messages' key")
+
+    if not isinstance(messages, list):
+        raise ValueError("'messages' must be a list")
+
+    chunks: list[Chunk] = []
+    for idx, msg in enumerate(messages):
+        if not isinstance(msg, dict):
+            logger.debug("Cline message %d is not an object — skipping", idx)
+            continue
+
+        role = msg.get("role", "unknown")
+        content_blocks = msg.get("content", [])
+        if not isinstance(content_blocks, list):
+            logger.debug("Cline message %d has non-list content — skipping", idx)
+            continue
+
+        parts: list[str] = []
+        for block in content_blocks:
+            if not isinstance(block, dict):
+                continue
+            block_type = block.get("type")
+
+            if block_type == "text":
+                text_val = block.get("text", "").strip()
+                if text_val:
+                    parts.append(text_val)
+            elif block_type == "tool_use":
+                name = block.get("name", "unknown")
+                inp = block.get("input", {})
+                parts.append(f"[tool_use: {name}] {json.dumps(inp)}")
+            elif block_type == "tool_result":
+                name = block.get("name", "unknown")
+                result = str(block.get("content", ""))
+                if len(result) > _CLINE_TOOL_RESULT_MAX:
+                    result = result[:_CLINE_TOOL_RESULT_MAX] + "..."
+                parts.append(f"[tool_result: {name}] {result}")
+            # thinking blocks are skipped — too verbose for search
+
+        if not parts:
+            continue
+
+        formatted = f"**{role}**: " + "\n".join(parts)
+        chunks.append(Chunk(content=formatted, index=idx, heading=None))
+
+    return chunks
+
+
+# ── JSONL Chunking ──────────────────────────────────────────────────────────────
+
+
+def chunk_jsonl(text: str) -> list[Chunk]:
+    """Split a JSONL file into one entry per conversational turn.
+
+    Handles two JSONL formats:
+
+    1. Copilot transcript format (actual):
+        {"type":"user.message","data":{"content":"..."}}
+        {"type":"assistant.message","data":{"content":"..."}}
+
+    2. Simple format (for testing / bulk import):
+        {"role":"user","content":"..."}
+        {"role":"assistant","content":"..."}
+
+    For Copilot transcripts, only user.message and assistant.message entries
+    are extracted (session.start, turn_start/end, tool executions are skipped).
+
+    Args:
+        text: Raw JSONL file content.
+
+    Returns:
+        List of Chunk objects. Empty list for empty input or no valid lines.
+    """
+    if not text.strip():
+        return []
+
+    chunks: list[Chunk] = []
+    for line_num, line in enumerate(text.splitlines()):
+        stripped = line.strip()
+        if not stripped:
+            continue
+
+        try:
+            obj = json.loads(stripped)
+        except json.JSONDecodeError:
+            logger.debug("JSONL line %d is not valid JSON — skipping", line_num + 1)
+            continue
+
+        if not isinstance(obj, dict):
+            logger.debug("JSONL line %d is not a JSON object — skipping", line_num + 1)
+            continue
+
+        # Copilot transcript format: {"type":"user.message","data":{"content":"..."}}
+        entry_type = obj.get("type", "")
+        if entry_type in ("user.message", "assistant.message"):
+            data = obj.get("data", {})
+            if not isinstance(data, dict):
+                continue
+            content = data.get("content", "")
+            if not content:
+                continue
+            role = "user" if entry_type == "user.message" else "assistant"
+            formatted = f"**{role}**: {content}"
+            chunks.append(Chunk(content=formatted, index=line_num, heading=None))
+            continue
+
+        # Simple format: {"role":"user","content":"..."}
+        # Only reached for non-transcript JSONL (e.g., test fixtures, bulk import)
+        role = obj.get("role", "")
+        if role:
+            content = obj.get("content", "")
+            if not content:
+                logger.debug("JSONL line %d has empty content — skipping", line_num + 1)
+                continue
+            formatted = f"**{role}**: {content}"
+            chunks.append(Chunk(content=formatted, index=line_num, heading=None))
+            continue
+
+        # Unknown format line — silently skip (session.start, turn_start, etc.)
+        logger.debug("JSONL line %d is not a message entry — skipping", line_num + 1)
 
     return chunks
 

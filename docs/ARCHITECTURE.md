@@ -59,8 +59,8 @@ graph TB
     end
     subgraph "Database"
         DB[database.py<br/>ConnectionPool]
-        SCH[schema.sql<br/>DDL + FTS5 + triggers]
-        MOD[models.py<br/>CRUD + search]
+        SCH[schema.sql<br/>DDL + FTS5 + triggers<br/>+ file_uploads tracking]
+        MOD[models.py<br/>CRUD + search<br/>+ file offset tracking]
     end
     subgraph "Caching"
         CAC[cache.py<br/>3 tiers: LRU, Search, Tags]
@@ -68,7 +68,7 @@ graph TB
     subgraph "API Routes"
         HLT[health.py<br/>GET /health]
         SES[sessions.py<br/>CRUD]
-        ENT[entries.py<br/>CRUD + batch + bulk + upload]
+        ENT[entries.py<br/>CRUD + batch + bulk + upload<br/>(incremental via offset)]
         SCHR[search.py<br/>FTS5 + tags]
         STA[stats.py<br/>GET /stats]
         ERR[errors.py<br/>handlers]
@@ -76,7 +76,7 @@ graph TB
     subgraph "Infrastructure"
         LOG[logging_config.py<br/>NDJSON]
         GIT[git_manager.py<br/>subprocess wrapper]
-        CHK[chunker.py<br/>doc ingestion]
+        CHK[chunker.py<br/>doc ingestion<br/>(.md/.txt/.json/.jsonl/.messages.json)]
     end
     CFG --> APP
     APP --> DB
@@ -159,6 +159,23 @@ graph TB
 ```
 
 **Key**: Each thread has a dedicated SQLite connection (`threading.local()`). Reads are fully concurrent (WAL mode). Writes serialize through a single `threading.Lock` held only for the duration of the INSERT/UPDATE/DELETE (~1-5ms). Readers never block on writers.
+
+### File Upload Offset Tracking
+
+The `file_uploads` table stores the last byte offset for each `(session_id, filename)` pair:
+
+```
+file_uploads
+ ├─ id (PK)
+ ├─ session_id (FK → sessions, CASCADE)
+ ├─ filename
+ ├─ byte_offset (last consumed position)
+ ├─ entries_created (cumulative count)
+ ├─ created_at / updated_at
+ └─ UNIQUE(session_id, filename)
+```
+
+When a file is re-uploaded, the server reads the tracked `byte_offset` and only imports new content after that position. This enables **incremental uploads** for growing files like conversation transcripts — no duplicates, no manual offset tracking required.
 
 ## Caching Architecture
 

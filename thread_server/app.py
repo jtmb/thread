@@ -6,11 +6,10 @@ every create_app() call produces a fresh, isolated instance.
 """
 
 import logging
-import os
 import time
 import uuid
 
-from flask import Flask, g, request, jsonify
+from flask import Flask, g, request
 
 from thread_server import config, cache, models
 from thread_server import database as db_module
@@ -28,8 +27,6 @@ from thread_server.routes import (
 from thread_server.stats_collector import (
     record_request_start,
     record_request_duration,
-    get_uptime_seconds,
-    get_request_stats,
 )
 
 logger = logging.getLogger(__name__)

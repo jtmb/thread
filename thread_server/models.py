@@ -76,6 +76,44 @@ def delete_session(db: sqlite3.Connection, session_id: int) -> bool:
     return cur.rowcount > 0
 
 
+# ── File Upload Offsets ────────────────────────────────────────────────────────
+
+
+def get_file_offset(db: sqlite3.Connection, session_id: int, filename: str) -> int | None:
+    """Get the last known byte offset for a file in a session.
+
+    Returns None if the file has never been uploaded to this session.
+    """
+    row = db.execute(
+        "SELECT byte_offset FROM file_uploads WHERE session_id = ? AND filename = ?",
+        (session_id, filename),
+    ).fetchone()
+    return row["byte_offset"] if row else None
+
+
+def upsert_file_offset(
+    db: sqlite3.Connection,
+    session_id: int,
+    filename: str,
+    byte_offset: int,
+    entries_created: int = 0,
+) -> None:
+    """Insert or update the byte-offset tracking row for a file upload.
+
+    Called after every upload so the next incremental upload knows where to resume.
+    """
+    db.execute(
+        """INSERT INTO file_uploads (session_id, filename, byte_offset, entries_created)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(session_id, filename) DO UPDATE SET
+               byte_offset = excluded.byte_offset,
+               entries_created = entries_created + excluded.entries_created,
+               updated_at = datetime('now')""",
+        (session_id, filename, byte_offset, entries_created),
+    )
+    db.commit()
+
+
 # ── Entries ────────────────────────────────────────────────────────────────────
 
 

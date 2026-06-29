@@ -9,7 +9,6 @@ import atexit
 import logging
 import sqlite3
 import threading
-import time
 
 from thread_server import config
 

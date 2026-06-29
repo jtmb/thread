@@ -258,7 +258,7 @@ TOOLS = [
     },
     {
         "name": "thread_upload_file",
-        "description": "Upload and auto-chunk a local document file (.md, .txt, .json) into entries. Markdown is split by ## headings, plaintext by paragraphs, JSON passthrough.",
+        "description": "Upload and auto-chunk a local document file (.md, .txt, .json, .jsonl, .messages.json) into entries. Markdown is split by ## headings, plaintext by paragraphs, JSON passthrough, JSONL split one entry per line with role+content extracted, Cline .messages.json split one entry per conversational turn (text + tool_use + tool_result; thinking blocks skipped).",
         "inputSchema": {
             "type": "object",
             "properties": {

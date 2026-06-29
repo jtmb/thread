@@ -1,6 +1,5 @@
 """Integration tests for all API routes using Flask test client."""
 
-import json
 import io
 
 
@@ -319,6 +318,85 @@ def test_bulk_create_partial_failure(client):
     data = resp.get_json()
     assert data["created"] == 2
     assert data["failed"] == 1
+
+
+# ── File Upload ────────────────────────────────────────────────────────────────
+
+
+def test_upload_file_returns_201(client):
+    """POST /entries/upload with a text file creates chunked entries."""
+    name = _setup_session(client, "upload-test")
+    data = {"file": (io.BytesIO(b"Hello\n\nWorld"), "test.txt")}
+    resp = client.post(
+        f"/api/v1/sessions/{name}/entries/upload",
+        content_type="multipart/form-data",
+        data=data,
+    )
+    assert resp.status_code == 201
+    result = resp.get_json()
+    assert result["entries_created"] >= 1
+    assert result["filename"] == "test.txt"
+    assert result["format"] == "text"
+    # First upload returns byte_offset matching the file size
+    assert result["byte_offset"] == len(b"Hello\n\nWorld")
+
+
+def test_upload_file_incremental_no_duplicates(client):
+    """Re-uploading the same file with offset returns 0 new entries."""
+    name = _setup_session(client, "upload-inc")
+    content = b'{"role": "user", "content": "First line"}\n{"role": "assistant", "content": "Second"}\n'
+
+    # First upload — full file
+    resp1 = client.post(
+        f"/api/v1/sessions/{name}/entries/upload",
+        content_type="multipart/form-data",
+        data={
+            "file": (io.BytesIO(content), "chat.jsonl"),
+        },
+    )
+    assert resp1.status_code == 201
+    assert resp1.get_json()["entries_created"] == 2
+    offset = resp1.get_json()["byte_offset"]
+
+    # Second upload — same content, same offset → 0 new
+    resp2 = client.post(
+        f"/api/v1/sessions/{name}/entries/upload",
+        content_type="multipart/form-data",
+        data={
+            "file": (io.BytesIO(content), "chat.jsonl"),
+            "offset": str(offset),
+        },
+    )
+    assert resp2.status_code == 201
+    assert resp2.get_json()["entries_created"] == 0
+
+
+def test_upload_file_incremental_new_lines_only(client):
+    """Only new lines after offset are imported."""
+    name = _setup_session(client, "upload-delta")
+    batch1 = b'{"role": "user", "content": "Old"}\n'
+    batch2 = b'{"role": "user", "content": "Old"}\n{"role": "user", "content": "New"}\n'
+
+    # Upload batch1
+    resp1 = client.post(
+        f"/api/v1/sessions/{name}/entries/upload",
+        content_type="multipart/form-data",
+        data={"file": (io.BytesIO(batch1), "chat.jsonl")},
+    )
+    assert resp1.status_code == 201
+    assert resp1.get_json()["entries_created"] == 1
+
+    # Upload batch2 (simulates file growth: Old + New) — offset auto-tracked
+    resp2 = client.post(
+        f"/api/v1/sessions/{name}/entries/upload",
+        content_type="multipart/form-data",
+        data={"file": (io.BytesIO(batch2), "chat.jsonl")},
+    )
+    assert resp2.status_code == 201
+    # Only "New" should be imported; "Old" is skipped
+    assert resp2.get_json()["entries_created"] == 1
+    entries = resp2.get_json()["entries"]
+    assert "New" in entries[0]["content"]
 
 
 # ── Search ─────────────────────────────────────────────────────────────────────

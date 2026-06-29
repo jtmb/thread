@@ -18,7 +18,6 @@ Configuration from environment variables (see config.py for all options):
 """
 
 import logging
-import sys
 
 from thread_server import config
 from thread_server.app import create_app

@@ -13,9 +13,9 @@ import os
 
 from flask import Blueprint, jsonify
 
-from thread_server import config, stats_collector
+from thread_server import config
 from thread_server.stats_collector import get_request_stats, get_uptime_seconds
-from thread_server.cache import search_cache, tag_cache
+from thread_server.cache import search_cache
 from thread_server import database as db_module
 
 logger = logging.getLogger(__name__)

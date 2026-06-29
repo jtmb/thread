@@ -8,7 +8,6 @@ Never use print() in production code paths.
 import json
 import logging
 import logging.config
-import os
 import sys
 import uuid
 from datetime import datetime, timezone

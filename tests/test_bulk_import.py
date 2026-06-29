@@ -2,10 +2,8 @@
 
 import io
 import json
-import os
 import tempfile
 
-import pytest
 
 
 def _setup_session(client, name="import-test"):

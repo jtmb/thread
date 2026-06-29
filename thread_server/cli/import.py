@@ -23,7 +23,7 @@ Usage:
         --dir ./docs/
 
 Behavior:
-    - Walks --dir recursively for .md, .txt, .json files
+    - Walks --dir recursively for .md, .txt, .json, .jsonl files
     - Chunks each file via chunker.py (reuses upload endpoint logic)
     - HTTP mode: pushes chunks in batches of 50 via /bulk endpoint
     - DB mode: uses models.create_entry() directly
@@ -79,7 +79,7 @@ Examples:
     parser.add_argument(
         "--dir",
         required=True,
-        help="Directory to scan for documents (.md, .txt, .json)",
+        help="Directory to scan for documents (.md, .txt, .json, .jsonl)",
     )
     parser.add_argument(
         "--tags",
@@ -398,7 +398,7 @@ def _collect_files(src_dir: Path) -> list[Path]:
     Returns:
         Sorted list of matching Path objects.
     """
-    extensions = {".md", ".markdown", ".txt", ".text", ".json"}
+    extensions = {".md", ".markdown", ".txt", ".text", ".json", ".jsonl"}
     files: list[Path] = []
 
     for root, _dirs, filenames in os.walk(src_dir):

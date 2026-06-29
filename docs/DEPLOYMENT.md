@@ -1,8 +1,116 @@
 # Thread — Deployment Guide
 
+Thread runs anywhere: a $35 Raspberry Pi, an old laptop, a cloud VM, or any machine with Docker. Pick the option that fits your setup.
+
+---
+
+## Docker / Container
+
+The easiest way to get Thread running. Single command, no Python setup, works on any architecture (amd64, arm64, armv7).
+
+### Quick Start
+
+```bash
+# Clone and start
+git clone https://github.com/jtmb/thread.git && cd thread
+docker compose up -d
+
+# Verify
+curl http://localhost:5000/api/v1/health
+```
+
+### Build & Run Manually
+
+```bash
+# Build the image
+docker build -t thread-server .
+
+# Run with persistent data volume
+docker run -d \
+  --name thread-server \
+  -p 5000:5000 \
+  -v thread_data:/app/data \
+  --restart unless-stopped \
+  thread-server
+
+# Check health
+docker ps --filter name=thread-server
+curl http://localhost:5000/api/v1/health
+```
+
+### Custom Configuration
+
+Override any config via environment variables:
+
+```bash
+docker run -d \
+  --name thread-server \
+  -p 5000:5000 \
+  -v thread_data:/app/data \
+  -e THREAD_LOG_LEVEL=DEBUG \
+  -e THREAD_POOL_SIZE=6 \
+  -e THREAD_MAX_SEARCH_RESULTS=200 \
+  thread-server
+```
+
+Or copy `.env.example` → `.env` and edit — Docker Compose picks it up automatically.
+
+### Container Management
+
+```bash
+# View logs
+docker logs -f thread-server
+
+# Check resource usage
+docker stats thread-server
+
+# Restart after config change
+docker compose restart
+
+# Stop
+docker compose down
+
+# Stop and wipe data (fresh start)
+docker compose down -v
+```
+
+### Data Persistence
+
+The `thread_data` named volume stores the SQLite database and per-session git repos. It survives container rebuilds, image updates, and `docker compose down` (without `-v`).
+
+```bash
+# Backup the database
+docker run --rm -v thread_data:/data alpine tar czf - -C /data . > thread-backup-$(date +%Y%m%d).tar.gz
+
+# Restore
+docker compose down
+docker volume rm thread_thread_data
+docker compose up -d  # Creates fresh volume
+cat thread-backup-20260628.tar.gz | docker run --rm -i -v thread_data:/data alpine tar xzf - -C /data
+```
+
+### Multi-Architecture
+
+The Dockerfile uses `python:3.12-slim` which is multi-arch. Builds and runs on:
+
+| Platform | Example Hardware |
+|----------|-----------------|
+| `linux/amd64` | Workstation, cloud VM, Intel NUC |
+| `linux/arm64` | Raspberry Pi 4/5, Apple Silicon, AWS Graviton |
+| `linux/arm/v7` | Raspberry Pi 3B |
+
+Build for a specific architecture:
+```bash
+docker build --platform linux/arm64 -t thread-server .
+```
+
+---
+
+## Bare Metal (Raspberry Pi)
+
 > Target: Raspberry Pi 3B (ARMv7, 1GB RAM) running Raspberry Pi OS Bookworm (64-bit).
 
-## Quick Deploy
+### Quick Deploy
 
 ```bash
 # From the repo root on your workstation, copy to Pi:

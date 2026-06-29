@@ -127,9 +127,10 @@ def test_create_session_duplicate_name_raises(db):
 ### Directory Layout
 ```
 .github/
-├── copilot-instructions.md   # Stub: tells Copilot to load skills
-├── skills/                   # Portable skill definitions
-│   └── thread-auto-context/  # Thread auto-context saving rules
+├── skills/                   # Portable skill definitions (alwaysApply: true)
+│   ├── thread-auto-context/  # Thread auto-context saving rules
+│   │   └── SKILL.md
+│   └── gh-cli/               # GitHub CLI usage rules
 │       └── SKILL.md
 ├── instructions/             # Framework/language overlays (applyTo globs)
 ├── prompts/                  # Reusable prompt templates
@@ -144,11 +145,14 @@ def test_create_session_duplicate_name_raises(db):
 - Skills are portable — copy the directory to any project's `.github/skills/` to use it there
 - `alwaysApply: true` in frontmatter means Copilot loads the skill automatically without explicit request
 - **`thread-auto-context`** — The auto-context skill. Tells Copilot to search/save Thread entries proactively
+- **`gh-cli`** — The GitHub CLI skill. Tells Copilot how to use `gh` for repo metadata, PRs, issues, releases, gists, and API calls
 
-### `.github/copilot-instructions.md` — Skill Loader Stub
+### `.github/copilot-instructions.md` — Skill Loader Stub (Optional)
+- Only needed for skills **without** `alwaysApply: true` in their frontmatter
 - Minimal file (5 lines) that tells Copilot to load and follow skills
 - Does NOT contain the full rules — those live in `SKILL.md` files
 - Pattern: "Always load and follow the **X** skill (`.github/skills/X/SKILL.md`)."
+- **Not required in this repo** — both skills (`thread-auto-context`, `gh-cli`) have `alwaysApply: true`
 
 ### `.vscode/mcp.json` — MCP Server Config
 - Workspace-level MCP server configuration (VS Code 1.99+)

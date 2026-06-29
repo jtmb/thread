@@ -1,9 +1,7 @@
 """Unit tests for GitManager — per-session git versioning."""
 
-import os
 import subprocess
 
-import pytest
 
 from thread_server.git_manager import GitManager
 

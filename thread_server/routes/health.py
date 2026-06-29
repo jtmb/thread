@@ -7,7 +7,7 @@ Route: GET /api/v1/health
 import logging
 import os
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify
 
 from thread_server import config
 from thread_server import database as db_module
