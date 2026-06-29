@@ -1,0 +1,51 @@
+[Unit]
+Description=Thread AI Context Server
+Documentation=https://github.com/branconet/thread
+After=network.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/thread-server
+ExecStart=/home/pi/thread-server/venv/bin/python thread_server/server.py
+
+# Auto-restart on failure
+Restart=always
+RestartSec=5
+
+# Configuration via environment variables (12-factor app)
+Environment=THREAD_HOST=0.0.0.0
+Environment=THREAD_PORT=5000
+Environment=THREAD_DB_PATH=/home/pi/thread-server/data/thread.db
+Environment=THREAD_GIT_BASE=/home/pi/thread-server/data/git
+Environment=THREAD_LOG_LEVEL=INFO
+Environment=THREAD_DEBUG=false
+Environment=THREAD_POOL_SIZE=12
+Environment=THREAD_POOL_TIMEOUT=10
+Environment=THREAD_MAX_SEARCH_RESULTS=100
+Environment=THREAD_CACHE_SIZE=512
+Environment=THREAD_SEARCH_CACHE_SIZE=128
+Environment=THREAD_SEARCH_CACHE_TTL=5
+Environment=THREAD_TAG_CACHE_TTL=30
+
+# Logging to systemd journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=thread-server
+
+# Memory limits: Pi 3B has 1GB total. Thread idles at ~90MB, peaks at ~400MB.
+# 800MB hard cap leaves 200MB for the OS.
+MemoryMax=800M
+MemoryHigh=600M
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/home/pi/thread-server/data
+ReadOnlyPaths=/home/pi/thread-server/thread_server
+ReadOnlyPaths=/home/pi/thread-server/venv
+
+[Install]
+WantedBy=multi-user.target

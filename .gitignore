@@ -1,0 +1,64 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+.python-version
+
+# Environment variables
+.env
+*.env.local
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Thread data directory (runtime DB, git repos)
+data/
+
+# VS Code — ignore editor configs, track mcp.example.json as template
+.vscode/
+!.vscode/mcp.example.json
+
+# JetBrains / other IDEs
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+*~
+
+# Build & distribution
+dist/
+build/
+*.egg-info/
+*.whl
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# MyPy
+.mypy_cache/
+
+# Logs
+*.log
+
+# Temporary / backup files
+*.bak
+*.orig
+*.tmp
+*.swp
+*.swo
+
+# macOS resource forks
+._*
