@@ -1,8 +1,8 @@
 /**
- * LoginView — authentication form for the Thread dashboard.
+ * LoginView — Pi-hole style full-page password-only login.
  *
- * Renders a login form (username + password). On submit, calls
- * ThreadAPI.login(), stores the token, and navigates to the dashboard.
+ * Hides the nav bar on mount for full-page takeover. On successful
+ * login, stores the token and redirects to the dashboard.
  */
 
 import { BaseView } from "./base.js";
@@ -10,40 +10,54 @@ import { ThreadAPI } from "../api.js";
 import { Auth } from "../auth.js";
 import { showToast } from "../utils.js";
 
+const NAV_SELECTOR = ".dashboard-nav";
+
 export class LoginView extends BaseView {
   async onMount() {
-    // If already authenticated, redirect to dashboard
     if (Auth.isAuthenticated()) {
       window.location.hash = "";
       return;
     }
+
+    this._hideNav();
     this.mountHTML(this.render());
     this._bindEvents();
   }
 
+  onUnmount() {
+    this._showNav();
+  }
+
+  _hideNav() {
+    const nav = document.querySelector(NAV_SELECTOR);
+    if (nav) nav.style.display = "none";
+  }
+
+  _showNav() {
+    const nav = document.querySelector(NAV_SELECTOR);
+    if (nav) nav.style.display = "";
+  }
+
   render() {
     return `
-      <article class="login-form">
-        <h2>Login</h2>
-        <form id="login-form">
-          <label>
-            Username
-            <input type="text" id="login-username" name="username"
-                   placeholder="admin" autocomplete="username" autofocus>
-          </label>
-          <label>
-            Password
-            <input type="password" id="login-password" name="password"
-                   placeholder="••••••••" autocomplete="current-password">
-          </label>
-          <div id="login-error" class="login-error" style="display:none;"></div>
-          <button type="submit" id="login-submit">Sign in</button>
-        </form>
-        <p class="login-hint">
-          <small>Auth is disabled by default. Contact your administrator
-          if you cannot sign in.</small>
-        </p>
-      </article>`;
+      <div class="login-page">
+        <div class="login-card">
+          <div class="login-logo">
+            <span class="login-icon">🔐</span>
+            <h1>Sign in to Thread</h1>
+          </div>
+          <form id="login-form">
+            <label>
+              Password
+              <input type="password" id="login-password"
+                     placeholder="Enter your password"
+                     autocomplete="current-password" autofocus>
+            </label>
+            <div id="login-error" class="login-error" style="display:none;"></div>
+            <button type="submit" id="login-submit">Log in</button>
+          </form>
+        </div>
+      </div>`;
   }
 
   _bindEvents() {
@@ -55,31 +69,37 @@ export class LoginView extends BaseView {
 
       const btn = document.getElementById("login-submit");
       const errorEl = document.getElementById("login-error");
-      const username = document.getElementById("login-username").value.trim();
       const password = document.getElementById("login-password").value;
 
-      if (!username || !password) {
-        errorEl.textContent = "Username and password are required.";
-        errorEl.style.display = "block";
+      if (!password) {
+        this._showError(errorEl, "Password is required.");
         return;
       }
 
-      btn.disabled = true;
-      btn.textContent = "Signing in…";
+      this._setSubmitting(btn, true);
       errorEl.style.display = "none";
 
       try {
         const api = new ThreadAPI();
-        const result = await api.login(username, password);
+        const result = await api.login(password);
         Auth.setToken(result.token);
         showToast("Login successful", "success");
         window.location.hash = "";
       } catch (err) {
-        errorEl.textContent = err.message || "Login failed. Check your credentials.";
-        errorEl.style.display = "block";
-        btn.disabled = false;
-        btn.textContent = "Sign in";
+        this._showError(errorEl, err.message || "Invalid password. Please try again.");
+        this._setSubmitting(btn, false);
+        document.getElementById("login-password")?.focus();
       }
     });
+  }
+
+  _showError(el, msg) {
+    el.textContent = msg;
+    el.style.display = "block";
+  }
+
+  _setSubmitting(btn, submitting) {
+    btn.disabled = submitting;
+    btn.textContent = submitting ? "Signing in…" : "Log in";
   }
 }

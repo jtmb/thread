@@ -73,6 +73,13 @@ graph TB
         STA[stats.py<br/>GET /stats]
         ERR[errors.py<br/>handlers]
     end
+    subgraph "Frontend (SPA)"
+        FE_BP[frontend/__init__.py<br/>Flask Blueprint<br/>/dashboard/*]
+        FE_HTML[index.html<br/>Jinja2 shell]
+        FE_JS[router.js + views/<br/>Hash SPA<br/>8 views]
+        FE_CSS[Pico.css v2<br/>+ app.css + print.css]
+        FE_CHART[Chart.js 4.4.7<br/>dashboard charts]
+    end
     subgraph "Infrastructure"
         LOG[logging_config.py<br/>NDJSON]
         GIT[git_manager.py<br/>subprocess wrapper]
@@ -82,6 +89,7 @@ graph TB
     APP --> DB
     APP --> CAC
     APP --> HLT & SES & ENT & SCHR & STA & ERR
+    APP --> FE_BP
     APP --> LOG
     DB --> SCH
     MOD --> DB
@@ -90,7 +98,13 @@ graph TB
     SES & ENT --> GIT
     ENT --> CHK
     SRV --> APP
+    FE_BP --> FE_HTML
+    FE_HTML --> FE_JS
+    FE_HTML --> FE_CSS
+    FE_JS --> FE_CHART
 ```
+
+See [`FRONTEND.md`](./FRONTEND.md) for full SPA architecture, view lifecycle, router details, and CSS conventions.
 
 ## Request Lifecycle
 

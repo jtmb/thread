@@ -16,6 +16,27 @@ All responses are JSON. All errors follow the standard shape:
 
 ---
 
+## Root & Dashboard
+
+### `GET /`
+
+Root redirect. Browsers hitting `http://<pi-ip>:5000/` are redirected to the dashboard SPA.
+
+**Response (302):**
+```
+Location: /dashboard/
+```
+
+No authentication required — this is a convenience redirect so users don't need to remember the `/dashboard/` path.
+
+### `GET /dashboard/`
+
+Serves the Thread dashboard SPA (single-page application). Returns `index.html` rendered by Jinja2 with the Pico.css dark theme shell. All subsequent routing is client-side via `#/` hash routes — the server is not involved in page transitions after the initial load.
+
+Blueprint: `frontend_bp` with `url_prefix=/dashboard`. Static assets (JS, CSS, vendor, images) are served from `/dashboard/static/`.
+
+---
+
 ## Health & Stats
 
 ### `GET /api/v1/health`

@@ -27,6 +27,45 @@ import time
 
 from thread_server import config
 
+# ── Password hash file override ────────────────────────────────────────────────
+# When the password is changed via the API (POST /api/v1/auth/change-password),
+# the new hash is written to AUTH_PASSWORD_HASH_FILE. This file takes priority
+# over the AUTH_PASSWORD_HASH env var, making runtime password changes persistent.
+# On first startup, both may be unset — set one up via the CLI or env var.
+
+
+def get_password_hash() -> str:
+    """Return the current password hash.
+
+    Checks the file-based override first (for runtime password changes),
+    then falls back to the AUTH_PASSWORD_HASH env var.
+    """
+    hash_file = config.AUTH_PASSWORD_HASH_FILE
+    if os.path.isfile(hash_file):
+        try:
+            with open(hash_file, "r") as fh:
+                stored = fh.read().strip()
+                if stored:
+                    return stored
+        except OSError:
+            pass  # Fall through to env var
+    return config.AUTH_PASSWORD_HASH
+
+
+def save_password_hash(password_hash: str) -> None:
+    """Persist a new password hash to disk for runtime password changes.
+
+    Writes atomically (write to temp, then rename) to avoid corruption.
+    """
+    hash_file = config.AUTH_PASSWORD_HASH_FILE
+    tmp_file = hash_file + ".tmp"
+    os.makedirs(os.path.dirname(hash_file) or ".", exist_ok=True)
+    with open(tmp_file, "w") as fh:
+        fh.write(password_hash + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp_file, hash_file)
+
 # PBKDF2 iteration count — OWASP recommends 600K for SHA-256 (2023+)
 PBKDF2_ITERATIONS = 600_000
 PBKDF2_HASH_FUNC = "sha256"
@@ -62,6 +101,7 @@ def create_token(username: str, secret_key: str | None = None, expiry_seconds: i
         secret_key: HMAC signing key. Defaults to config.AUTH_SECRET_KEY.
                      Auto-generates a random key if the config value is empty.
         expiry_seconds: Token lifetime in seconds. Defaults to config.AUTH_TOKEN_EXPIRY.
+                         Pass 0 to create a token with no expiry (no `exp` claim).
 
     Returns:
         Base64-encoded token string: header.payload.signature
@@ -73,7 +113,10 @@ def create_token(username: str, secret_key: str | None = None, expiry_seconds: i
 
     now = int(time.time())
     header = {"alg": "HS256", "typ": "THREAD"}
-    payload = {"sub": username, "iat": now, "exp": now + expiry_seconds}
+    payload = {"sub": username, "iat": now}
+    if expiry_seconds > 0:
+        payload["exp"] = now + expiry_seconds
+    # expiry_seconds == 0 → no exp claim (token never expires)
 
     header_b64 = _b64url_encode(json.dumps(header, separators=(",", ":")))
     payload_b64 = _b64url_encode(json.dumps(payload, separators=(",", ":")))
@@ -120,8 +163,8 @@ def verify_token(token: str, secret_key: str | None = None) -> dict | None:
     except (json.JSONDecodeError, ValueError):
         return None
 
-    # Check expiry
-    if payload.get("exp", 0) <= int(time.time()):
+    # Check expiry (skip if no exp claim — non-expiring API token)
+    if "exp" in payload and payload["exp"] <= int(time.time()):
         return None
 
     return payload

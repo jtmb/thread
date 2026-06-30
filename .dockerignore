@@ -76,3 +76,4 @@ deploy/
 
 # macOS resource forks
 ._*
+.env.container

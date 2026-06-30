@@ -124,3 +124,55 @@ def get_tags(name: str):
         cache.tag_cache.set(g.session_id, tags)
 
     return jsonify({"tags": tags, "session": name, "cached": False})
+
+
+@search_bp.route("/api/v1/search", methods=["GET"])
+def search_global():
+    """Full-text search across all sessions (or a subset) with FTS5 ranking.
+
+    Query params:
+        q: Search query (FTS5 syntax).
+        sessions: Comma-separated session names to search (default: all).
+        limit: Max results (default 100, capped at MAX_SEARCH_RESULTS).
+
+    Results include session_name so the frontend can group by session.
+    """
+    db = g.db
+    query = request.args.get("q", "").strip()
+    limit = request.args.get("limit", config.MAX_SEARCH_RESULTS, type=int)
+    limit = min(limit, config.MAX_SEARCH_RESULTS)
+
+    # Resolve session filter
+    session_arg = request.args.get("sessions", "").strip()
+    if session_arg:
+        session_names = [s.strip() for s in session_arg.split(",") if s.strip()]
+    else:
+        session_names = []
+
+    # Resolve names to IDs
+    if session_names:
+        resolved = []
+        for name in session_names:
+            session = models.get_session_by_name(db, name)
+            if session is None:
+                return _error(
+                    404, "NOT_FOUND", f"Session '{name}' not found in search"
+                )
+            resolved.append(session["id"])
+        session_ids = resolved
+    else:
+        all_sessions = models.list_sessions(db)
+        session_ids = [s["id"] for s in all_sessions]
+
+    if not session_ids:
+        return jsonify({"results": [], "query": query, "count": 0})
+
+    results = models.search_entries_across_sessions(
+        db, session_ids, query, limit=limit
+    )
+
+    return jsonify({
+        "results": results,
+        "query": query,
+        "count": len(results),
+    })

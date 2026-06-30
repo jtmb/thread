@@ -362,3 +362,58 @@ def get_all_tags(db: sqlite3.Connection, session_id: int) -> list[str]:
         (session_id,),
     ).fetchall()
     return [r["tag"] for r in rows if r["tag"]]
+
+
+def search_entries_across_sessions(
+    db: sqlite3.Connection,
+    session_ids: list[int],
+    query: str,
+    limit: int | None = None,
+) -> list[dict]:
+    """Full-text search across multiple sessions using FTS5 with BM25 ranking.
+
+    Args:
+        db: Active database connection.
+        session_ids: List of session IDs to search within.
+        query: FTS5 query string.
+        limit: Max results total across all sessions.
+
+    Returns:
+        List of entry dicts with 'rank', 'snippet', and 'session_name' fields.
+    """
+    limit = limit or config.MAX_SEARCH_RESULTS
+    limit = min(limit, config.MAX_SEARCH_RESULTS)
+
+    if not session_ids:
+        return []
+
+    if not query or not query.strip():
+        # Empty query → return most recent entries across sessions
+        placeholders = ",".join("?" * len(session_ids))
+        rows = db.execute(
+            f"""SELECT e.id, e.content, e.tags, e.priority, e.created_at, e.updated_at,
+                       e.session_id, s.name AS session_name
+                FROM entries e
+                JOIN sessions s ON e.session_id = s.id
+                WHERE e.session_id IN ({placeholders})
+                ORDER BY e.created_at DESC
+                LIMIT ?""",
+            (*session_ids, limit),
+        ).fetchall()
+        return [_row_to_entry(r) for r in rows]
+
+    placeholders = ",".join("?" * len(session_ids))
+    rows = db.execute(
+        f"""SELECT e.rowid AS id, e.content, e.tags, e.priority,
+                   e.created_at, e.updated_at, e.session_id,
+                   s.name AS session_name,
+                   bm25(entries_fts) AS rank,
+                   snippet(entries_fts, 1, '<mark>', '</mark>', '...', 64) AS snippet
+            FROM entries_fts e
+            JOIN sessions s ON e.session_id = s.id
+            WHERE entries_fts MATCH ? AND e.session_id IN ({placeholders})
+            ORDER BY rank
+            LIMIT ?""",
+        (query, *session_ids, limit),
+    ).fetchall()
+    return [_row_to_entry(r) for r in rows]

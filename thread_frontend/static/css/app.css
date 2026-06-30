@@ -227,47 +227,141 @@
   font-weight: 600;
 }
 
-/* ── Login Form ───────────────────────────────────────────────────────── */
-.login-form {
+/* ── Login (Pi‑hole style full‑page takeover) ────────────────────────── */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 2rem;
+}
+
+.login-card {
+  width: 100%;
   max-width: 400px;
-  margin: 2rem auto;
+  padding: 2rem 2rem 1.75rem;
+  border-radius: 12px;
+  background: var(--pico-card-background-color, #1a1a2e);
+  border: 1px solid var(--pico-muted);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
 }
 
-.login-error {
-  color: #d32f2f;
-  font-size: 0.875rem;
-  margin-bottom: 0.5rem;
-  padding: 0.5rem;
-  border-left: 3px solid #d32f2f;
-  background: rgba(211, 47, 47, 0.08);
-}
-
-.login-hint {
+.login-logo {
   text-align: center;
-  margin-top: 1rem;
-}
-
-/* ── Search ───────────────────────────────────────────────────────────── */
-.search-controls {
   margin-bottom: 1.5rem;
 }
 
+.login-icon {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.login-logo h1 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0;
+  color: var(--pico-color);
+}
+
+.login-error {
+  color: #f56565;
+  font-size: 0.875rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid #f56565;
+  background: rgba(245, 101, 101, 0.08);
+  border-radius: 4px;
+}
+
+/* ── Search ───────────────────────────────────────────────────────────── */
+
+/* Search input — full Pico pill, no attached button */
 .search-input {
-  width: 100%;
   font-size: 1.1rem;
   padding: 0.75rem 1rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 1rem;
 }
 
-.search-filters {
+/* Session filter — native &lt;details&gt; disclosure below the input */
+.search-filter {
+  margin-bottom: 1rem;
+  border: var(--pico-border-width) solid var(--pico-form-element-border-color);
+  border-radius: var(--pico-border-radius);
+  background: var(--pico-form-element-background-color);
+}
+
+.search-filter summary {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+  cursor: pointer;
+  color: var(--pico-form-element-color);
+  user-select: none;
+}
+
+.search-filter summary:hover {
+  color: var(--pico-color);
+}
+
+.search-filter summary::marker {
+  font-size: 0.8rem;
+  color: var(--pico-muted-color);
+}
+
+.search-filter[open] summary {
+  border-bottom: var(--pico-border-width) solid var(--pico-form-element-border-color);
+}
+
+.search-filter-body {
+  padding: 0 0 4px 0;
+}
+
+/* Filter rows — same as before */
+.session-filter-row {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  padding: 0.45rem 0.75rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  transition: background 0.15s;
+  user-select: none;
 }
 
-.session-filter {
-  min-width: 200px;
-  max-width: 100%;
+.session-filter-row:last-child {
+  border-bottom: none;
+}
+
+.session-filter-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.session-filter-row.selected {
+  background: rgba(1, 170, 255, 0.08);
+  border-left: 3px solid var(--pico-primary);
+}
+
+.session-filter-row input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  accent-color: var(--pico-primary);
+  flex-shrink: 0;
+}
+
+.session-filter-row .badge {
+  margin-left: auto;
+  font-size: 0.75rem;
+}
+
+.session-filter-row.all-sessions {
+  font-weight: 600;
+}
+
+.session-filter-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 0;
 }
 
 .search-count {
@@ -455,6 +549,31 @@
   overflow-y: auto;
 }
 
+/* ── Change Password Form ────────────────────────────────────────────── */
+.change-password-form {
+  margin-top: 1rem;
+}
+
+.form-error,
+.form-success {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+  font-size: 0.9rem;
+}
+
+.form-error {
+  background: var(--pico-del-color);
+  border-left: 4px solid var(--pico-form-element-invalid-active-border-color, #c62828);
+  color: var(--pico-color);
+}
+
+.form-success {
+  background: var(--pico-ins-color);
+  border-left: 4px solid var(--pico-form-element-valid-active-border-color, #2e7d32);
+  color: var(--pico-color);
+}
+
 /* ── Browser (entry list) ─────────────────────────────────────────────── */
 .browser-toolbar {
   display: flex;
@@ -462,8 +581,46 @@
   margin-bottom: 1rem;
 }
 
+.export-dropdown {
+  position: relative;
+}
+
+.export-menu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.25rem;
+  background: #1a1f2b;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 0.25rem;
+  z-index: 50;
+  min-width: 140px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+.export-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.4rem 0.75rem;
+  border: none;
+  background: transparent;
+  color: var(--pico-color);
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.export-menu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .browser-entry {
   position: relative;
+  background: #1e2430;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid var(--pico-primary);
 }
 
 .browser-entry-actions {

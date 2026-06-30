@@ -11,6 +11,7 @@ Performance:
 
 import logging
 import os
+import time
 from typing import Any
 
 import requests
@@ -22,17 +23,58 @@ logger = logging.getLogger(__name__)
 # Module-level requests Session — connection reuse across calls
 _session: requests.Session | None = None
 
+# Cached auth token — obtained once on first use, re-logged-in on 401
+_token: str | None = None
+_token_expiry: float = 0.0
+
 
 def _get_session() -> requests.Session:
-    """Return (or create) the shared requests Session."""
+    """Return (or create) the shared requests Session, with auth if configured."""
     global _session
     if _session is None:
         _session = requests.Session()
         _session.headers.update({
-            "Content-Type": "application/json",
             "Accept": "application/json",
         })
+    _ensure_auth()
     return _session
+
+
+def _ensure_auth() -> None:
+    """Ensure the session has a valid auth token.
+
+    Called before every API request. Priority:
+      1. THREAD_API_TOKEN — pre-generated non-expiring token, used directly
+      2. THREAD_AUTH_PASSWORD — logs in and caches the returned token
+      3. Neither — auth disabled on server, no token needed
+    """
+    global _token, _token_expiry
+
+    # Priority 1: pre-generated API token — use directly, no expiry tracking
+    if config.THREAD_API_TOKEN:
+        _session.headers["Authorization"] = f"Bearer {config.THREAD_API_TOKEN}"
+        return
+
+    if not config.THREAD_AUTH_PASSWORD:
+        return  # Auth disabled on server, no token needed
+
+    # Token still valid (with 60s buffer)?
+    if _token and time.monotonic() < _token_expiry - 60:
+        return
+
+    # Log in and store the token on the session for all future calls.
+    # Use _session directly (not _get_session()) to avoid recursion.
+    resp = _session.post(
+        _url("/api/v1/auth/login"),
+        json={"password": config.THREAD_AUTH_PASSWORD},
+        timeout=5,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    _token = data["token"]
+    _token_expiry = time.monotonic() + data.get("expires_in", 86400)
+    _session.headers["Authorization"] = f"Bearer {_token}"
+    logger.info("Bridge authenticated to Thread server")
 
 
 def _url(path: str) -> str:
@@ -329,11 +371,10 @@ def upload_file(
             "priority": str(priority),
             "chunk_size": str(chunk_size),
         }
-        resp = requests.post(
+        resp = _get_session().post(
             _url(f"/api/v1/sessions/{session}/entries/upload"),
             files=files,
             data=data,
-            # Don't use the shared session for multipart — different Content-Type
             timeout=config.THREAD_REQUEST_TIMEOUT * 2,  # Upload may be slower
         )
 

@@ -78,6 +78,53 @@ docker compose down -v
 
 The `thread_data` named volume stores the SQLite database and per-session git repos. It survives container rebuilds, image updates, and `docker compose down` (without `-v`).
 
+### Auth Setup (Docker)
+
+Thread auth is enabled by default. Set these before starting the container:
+
+```bash
+# Generate secrets
+SECRET_KEY=$(python3 -c "import secrets; print(secrets.token_hex(32))")
+PASSWORD_HASH=$(python3 -m thread_server.cli.set_password 2>/dev/null)  # Interactive prompt
+```
+
+**`.env`** (gitignored, auto-loaded by docker-compose):
+```bash
+THREAD_AUTH_SECRET_KEY=<64 hex chars>
+THREAD_AUTH_PASSWORD_HASH=pbkdf2:sha256:600000$$<salt>$$<hash>
+THREAD_AUTH_ENABLED=true
+```
+
+**`.env.container`** (gitignored, bypasses `$` interpolation in compose):
+```bash
+THREAD_AUTH_PASSWORD_HASH=pbkdf2:sha256:600000$<salt>$<hash>
+```
+
+> **Why two files?** docker-compose interprets `$<chars>` as variable substitution. The `.env` file uses `$$` to escape. `.env.container` uses `env_file` in compose to pass the raw hash without escaping.
+
+Get a non-expiring API token for MCP bridge use:
+```bash
+TOKEN=$(curl -s -X POST http://localhost:5000/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"password":"YOUR_PASSWORD","expires_in":0}' | python3 -c "import sys,json; print(json.load(sys.stdin)['token'])")
+echo "API Token: $TOKEN"
+```
+
+Place the token in `.vscode/mcp.json`:
+```json
+{
+  "servers": {
+    "thread": {
+      "env": {
+        "THREAD_API_TOKEN": "<token from above>"
+      }
+    }
+  }
+}
+```
+
+See `docs/AUTH-SETUP.md` for the complete auth workflow.
+
 ```bash
 # Backup the database
 docker run --rm -v thread_data:/data alpine tar czf - -C /data . > thread-backup-$(date +%Y%m%d).tar.gz

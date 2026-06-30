@@ -23,16 +23,16 @@ At session start, if Thread MCP is not already configured, bootstrap the bridge 
 ```
 Session start
   │
-  ├─ .vscode/mcp.json has servers.thread? ──→ Done. Skip setup.
+  ├─ .vscode/mcp.json in current workspace has servers.thread? ──→ Done. Skip setup.
   │
-  ├─ .vscode/thread-bridge/bridge.py exists? ──→ Write mcp.json, verify server reachable, done.
+  ├─ ~/.thread-bridge/bridge.py exists? ──→ Write .vscode/mcp.json, add to .gitignore, verify server reachable, done.
   │
   └─ Neither exists ──→ Full bootstrap (do NOT start server):
-       1. mkdir -p .vscode/thread-bridge/
+       1. mkdir -p ~/.thread-bridge/thread_bridge/
        2. Download 5 bridge files from GitHub raw
-       3. python3 -m venv .vscode/thread-bridge/.venv
+       3. python3 -m venv ~/.thread-bridge/.venv
        4. Install requests into that venv
-       5. Write .vscode/mcp.json (Copilot)
+       5. Write .vscode/mcp.json at workspace root + add to .gitignore
        6. Write Cline MCP config (global + workspace)
        7. Check if server is reachable; if not, tell user how to start it
 ```
@@ -41,12 +41,12 @@ Session start
 
 **Step 1 — Create directory:**
 ```bash
-mkdir -p .vscode/thread-bridge/thread_bridge/
+mkdir -p ~/.thread-bridge/thread_bridge/
 ```
 
 **Step 2 — Download bridge files from GitHub raw (5 files):**
 
-Use `curl -sSfL` (silent, show errors, fail on HTTP errors, follow redirects). Save each to `.vscode/thread-bridge/thread_bridge/`:
+Use `curl -sSfL` (silent, show errors, fail on HTTP errors, follow redirects). Save each to `~/.thread-bridge/thread_bridge/`:
 
 | File | URL |
 |------|-----|
@@ -60,40 +60,44 @@ Run all 5 downloads in parallel. If any fail, retry once. If still failing, tell
 
 **Step 3 — Create venv and install dependencies:**
 ```bash
-python3 -m venv .vscode/thread-bridge/.venv
-.vscode/thread-bridge/.venv/bin/pip install requests>=2.31
+python3 -m venv ~/.thread-bridge/.venv
+~/.thread-bridge/.venv/bin/pip install requests>=2.31
 ```
 
-Use `python3` (system Python). If `python3` is not found, try `python`. On Windows, use `python` and `.venv\Scripts\pip.exe`.
+Use `python3` (system Python). If `python3` is not found, try `python`. On Windows, use `python` and `~/.thread-bridge/.venv/Scripts/pip.exe`.
 
-**Step 4 — Write `.vscode/mcp.json`:**
+**Step 4 — Write workspace MCP config + gitignore:**
 
-Build the absolute path to the workspace root (where `.vscode/` lives). Write:
+Copilot Chat 0.54.0 reads MCP server config from `.vscode/mcp.json` in the current workspace. Write it at the workspace root (e.g., `/home/user/repos/thread/.vscode/mcp.json`). Use your actual home directory path (run `echo $HOME` to determine it):
 
 ```json
 {
   "servers": {
     "thread": {
       "type": "stdio",
-      "command": "<WORKSPACE_ROOT>/.vscode/thread-bridge/.venv/bin/python",
+      "command": "<HOME>/.thread-bridge/.venv/bin/python",
       "args": ["-m", "thread_bridge.bridge"],
-      "cwd": "<WORKSPACE_ROOT>/.vscode/thread-bridge",
+      "cwd": "<HOME>/.thread-bridge",
       "env": {
         "THREAD_SERVER_URL": "http://localhost:5000",
-        "THREAD_DEFAULT_SESSION": "<WORKSPACE_BASENAME>",
-        "THREAD_REQUEST_TIMEOUT": "10"
+        "THREAD_DEFAULT_SESSION": "default",
+        "THREAD_REQUEST_TIMEOUT": "10",
+        "THREAD_API_TOKEN": "<generate from dashboard or leave empty>"
       }
     }
-  },
-  "inputs": []
+  }
 }
 ```
 
-Replace `<WORKSPACE_ROOT>` with the absolute path and `<WORKSPACE_BASENAME>` with the last component of the workspace path (e.g., `thread` from `/home/user/repos/thread`). Run `pwd` or `basename "$PWD"` to determine it.
+Replace `<HOME>` with the absolute path to the user's home directory (e.g., `/home/brajam`). Run `echo $HOME` to determine it.
 
-If `.vscode/mcp.json` already exists (with other servers), merge `servers.thread` into the existing `servers` — don't overwrite other servers. Keep existing `inputs`.
+**MANDATORY — add to .gitignore:** After writing the config, add `.vscode/mcp.json` to the workspace `.gitignore`. If `.gitignore` doesn't exist, create it. The API token in this file must never be committed.
 
-On Windows, the command path is `<WORKSPACE_ROOT>/.vscode/thread-bridge/.venv/Scripts/python.exe`.
+```bash
+grep -Fxq ".vscode/mcp.json" .gitignore 2>/dev/null || echo ".vscode/mcp.json" >> .gitignore
+```
+
+This file lives in the workspace because VS Code Copilot Chat currently only reads MCP config from `.vscode/mcp.json` — there is no global MCP config path for user-configured servers.
 
 **Step 5 — Verify server reachability (do NOT start server):**
 
@@ -115,20 +119,21 @@ Check if Cline's global settings directory exists:
 ls ~/.vscode-server/data/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json 2>/dev/null
 ```
 
-If found, merge the Thread server into it. Read the file, add `"thread"` to `mcpServers`, and write back. Same config shape as the `.vscode/mcp.json` server block but the top-level key is `mcpServers` (not `servers`):
+If found, merge the Thread server into it. Read the file, add `"thread"` to `mcpServers`, and write back. Use the global bridge path (`~/.thread-bridge/`) for command and cwd:
 
 ```json
 {
   "mcpServers": {
     "thread": {
       "type": "stdio",
-      "command": "<WORKSPACE_ROOT>/.vscode/thread-bridge/.venv/bin/python",
+      "command": "<HOME>/.thread-bridge/.venv/bin/python",
       "args": ["-m", "thread_bridge.bridge"],
-      "cwd": "<WORKSPACE_ROOT>/.vscode/thread-bridge",
+      "cwd": "<HOME>/.thread-bridge",
       "env": {
         "THREAD_SERVER_URL": "http://localhost:5000",
-        "THREAD_DEFAULT_SESSION": "<WORKSPACE_BASENAME>",
-        "THREAD_REQUEST_TIMEOUT": "10"
+        "THREAD_DEFAULT_SESSION": "default",
+        "THREAD_REQUEST_TIMEOUT": "10",
+        "THREAD_API_TOKEN": "<generate from dashboard or leave empty>"
       }
     }
   }
@@ -147,19 +152,18 @@ If Cline's directory doesn't exist, just write `.cline/mcp.json` at the workspac
 
 ### ⛔ SESSION RULE
 
-**If `.vscode/mcp.json` already has `THREAD_DEFAULT_SESSION` set, use it. Never create a different session.**
+**The `.vscode/mcp.json` config sets `THREAD_DEFAULT_SESSION`. For per-project isolation, pass `session` with the workspace basename on every tool call.**
 
-- During **bootstrap** (fresh repo, no `.vscode/mcp.json`): the bridge auto-creates the session on first tool call. This is expected.
-- During **normal operation** (`.vscode/mcp.json` exists): the default session IS your session. Never pass `session` param. Never call `thread_create_session`. The only exception: the user explicitly says "create a session for X."
-
-I created `thread-dev` when `thread` was already configured — that was the bug. Don't do that.
+- Run `basename "$PWD"` to get the current session name (e.g., `thread`, `slop-generator`).
+- Pass this as the `session` parameter on every `thread_*` tool call. This keeps projects separate.
+- The `THREAD_DEFAULT_SESSION` (`"default"`) is only a fallback — always prefer the workspace basename.
+- Never call `thread_create_session` unless the user explicitly says "create a session for X." The bridge auto-creates the session on first use.
 
 ### At Session Start
-1. Read `.vscode/mcp.json` — note the `THREAD_DEFAULT_SESSION` value in `env`
-2. If `.vscode/mcp.json` just got created (bootstrap), the bridge will auto-create the session on the first tool call. Skip to search.
-3. If already configured: call `thread_read_entries` with `sort: "desc"`, `limit: 10` to see recent entries
-4. Search past context relevant to the user's first question using `thread_search`
-5. Summarize the most relevant entries before answering
+1. Run `basename "$PWD"` to determine the session name for this workspace (e.g., `thread`)
+2. Call `thread_read_entries` with `session: "<workspace>", sort: "desc", limit: 10` to see recent entries
+3. Search past context relevant to the user's first question using `thread_search` with `session: "<workspace>"`
+4. Summarize the most relevant entries before answering
 
 ### During the Session — MANDATORY CHECKLIST
 
@@ -168,11 +172,11 @@ I created `thread-dev` when `thread` was already configured — that was the bug
 After EVERY code change (write/edit/delete/refactor), IMMEDIATELY save context before doing anything else:
 
 > **Did I just...**
-> - Make a design decision? → `thread_create_entry` NOW. Priority 8. Tags: `["decision"]`. Do NOT pass `session` param.
-> - Fix a bug with a non-obvious lesson? → `thread_create_entry` NOW. Priority 9. Tags: `["bug"]`. Include root cause.
-> - Hear the user express a preference? → `thread_create_entry` NOW. Priority 7. Tags: `["preference"]`.
-> - Hear the user state a constraint/deadline/requirement? → `thread_create_entry` NOW. Priority 9.
-> - Create or update a documentation file? → `thread_upload_file` NOW. Tags: `["reference", "docs"]`. Priority 4.
+> - Make a design decision? → `thread_create_entry` NOW with `session: "<workspace>"`. Priority 8. Tags: `["decision"]`.
+> - Fix a bug with a non-obvious lesson? → `thread_create_entry` NOW with `session: "<workspace>"`. Priority 9. Tags: `["bug"]`. Include root cause.
+> - Hear the user express a preference? → `thread_create_entry` NOW with `session: "<workspace>"`. Priority 7. Tags: `["preference"]`.
+> - Hear the user state a constraint/deadline/requirement? → `thread_create_entry` NOW with `session: "<workspace>"`. Priority 9.
+> - Create or update a documentation file? → `thread_upload_file` NOW with `session: "<workspace>"`. Tags: `["reference", "docs"]`. Priority 4.
 
 **If you call task_complete and haven't saved context since your last code change, you have violated this rule.** The `.github/instructions/thread-auto-context.instructions.md` instruction fires before every edit and will remind you.
 
@@ -193,7 +197,11 @@ This prevents silent failures from disk-full conditions on resource-constrained 
 
 At session end (or when the user asks), upload the current Copilot conversation transcript automatically:
 
-1. **Locate the transcript** — Use the path `{{VSCODE_TARGET_SESSION_LOG}}`. This is a `.jsonl` file that grows in real-time as the conversation proceeds. VS Code provides this path automatically — just substitute the variable.
+1. **Locate the transcript** — Use `{{VSCODE_TARGET_SESSION_LOG}}` to get the workspaces directory, then construct the transcript path:
+   - `{{VSCODE_TARGET_SESSION_LOG}}` = `.../workspaceStorage/{workspaceGuid}/GitHub.copilot-chat/debug-logs/{sessionId}/main.jsonl`
+   - **The actual transcript is at**: `.../workspaceStorage/{workspaceGuid}/GitHub.copilot-chat/transcripts/{sessionId}.jsonl`
+   - Extract `sessionId` from the debug-log path (it's the last directory component), then build the `transcripts/{sessionId}.jsonl` path.
+   - Also upload prior session transcripts — list the `transcripts/` directory and upload all `.jsonl` files to capture context from past conversations.
 
 2. **Upload with auto-tracking** — Run `thread_upload_file` on that path with `session` set to the current workspace name (run `basename "$PWD"`). Tags: `["transcript", "copilot", "conversation"]`. Priority: 3.
 
@@ -226,14 +234,14 @@ When you create or modify documentation files (`.md`, `.txt`, `.json`, `.jsonl`)
   3. **Upload the updated file** — Run `thread_upload_file` on the changed file with the same Tags: `["reference", "docs"]`. Priority: 4.
 
 ### VS Code Integration
-Once `.vscode/mcp.json` is written, the VS Code MCP extension automatically detects the config change and spawns the bridge process. No manual reload needed. If Thread tools don't appear within ~15 seconds, run the VS Code command `Developer: Reload Window`.
+Once `.vscode/mcp.json` is written at the workspace root, reload the window (`Developer: Reload Window`) to pick up the new server. Thread MCP tools should appear within ~15 seconds after reload.
 
 ### Cline Integration
 Once the Cline MCP config is written (global settings and/or `.cline/mcp.json`), the user must **reload the Cline extension** for it to pick up the new server. Tell the user: "Reload the Cline extension (or the window) to activate the Thread MCP server." The Cline extension does NOT auto-detect config file changes — reload is manual.
 
 ## Session Names
 
-**You do not pick the session name.** The MCP config in `.vscode/mcp.json` sets `THREAD_DEFAULT_SESSION` — that IS the session. Every `thread_*` tool defaults to it. Never pass `session` param unless the user explicitly asks. Only call `thread_create_session` if the user says "create a session."
+**The session is the workspace basename.** Run `basename "$PWD"` to get it. Pass it as `session` on every `thread_*` tool call. The `.vscode/mcp.json` config's `THREAD_DEFAULT_SESSION` is just a fallback — always prefer the explicit workspace session. Never call `thread_create_session` unless the user explicitly says "create a session for X."
 
 ## Priority Guidelines
 | Priority | When to use |
@@ -255,7 +263,7 @@ Once the Cline MCP config is written (global settings and/or `.cline/mcp.json`),
 - Project-specific tags as appropriate
 
 ## Never
-- Don't create a different session when `THREAD_DEFAULT_SESSION` is already in `.vscode/mcp.json` — use the default. Bootstrap auto-creates the session on first use; that's fine.
+- Don't use `THREAD_DEFAULT_SESSION` blindly — always pass `session: "<workspace>"` from `basename "$PWD"` for per-project isolation
 - Don't create entries without meaningful content (no "OK" or "Got it" entries)
 - Don't save the user's secrets, passwords, tokens, or API keys
 - Don't spam — if you just saved the same decision 2 minutes ago, don't save it again

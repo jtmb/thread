@@ -106,15 +106,20 @@ class TestAuthRoutes:
     """Integration tests for auth endpoints using Flask test client."""
 
     def test_login_auth_disabled_succeeds(self, client):
-        """When auth is disabled, any credentials get a token."""
-        resp = client.post("/api/v1/auth/login", json={
-            "username": "anyone", "password": "anything",
-        })
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert "token" in data
-        assert data["expires_in"] > 0
-        assert data["token_type"] == "Bearer"
+        """When auth is disabled, any password gets a token."""
+        from thread_server import config
+        config.AUTH_ENABLED = False
+        try:
+            resp = client.post("/api/v1/auth/login", json={
+                "password": "anything",
+            })
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert "token" in data
+            assert data["expires_in"] > 0
+            assert data["token_type"] == "Bearer"
+        finally:
+            config.AUTH_ENABLED = True  # Restore default
 
     def test_login_missing_body_returns_400(self, client):
         """Empty body returns 400."""
@@ -129,16 +134,25 @@ class TestAuthRoutes:
 
     def test_protected_route_with_valid_token(self, client):
         """A valid token allows access to protected routes."""
-        # Login to get a token
-        login_resp = client.post("/api/v1/auth/login", json={
-            "username": "admin", "password": "doesnt-matter",
-        })
-        token = login_resp.get_json()["token"]
+        from thread_server import config as cfg
+        cfg.AUTH_ENABLED = False
+        try:
+            # Login to get a token (any password works when auth is disabled)
+            login_resp = client.post("/api/v1/auth/login", json={
+                "password": "doesnt-matter",
+            })
+            token = login_resp.get_json()["token"]
 
-        # Use token to access protected resource
-        resp = client.get("/api/v1/sessions",
-                          headers={"Authorization": f"Bearer {token}"})
-        assert resp.status_code == 200
+            # Token works even with auth re-enabled because it was issued
+            # by the same running app (same secret key)
+            cfg.AUTH_ENABLED = True
+
+            # Use token to access protected resource
+            resp = client.get("/api/v1/sessions",
+                              headers={"Authorization": f"Bearer {token}"})
+            assert resp.status_code == 200
+        finally:
+            cfg.AUTH_ENABLED = True  # Restore default
 
     def test_protected_route_no_token_returns_401(self, client, monkeypatch):
         """Without auth header, protected routes return 401 when auth enabled."""
@@ -169,25 +183,40 @@ class TestAuthRoutes:
 
     def test_logout_returns_ok(self, client):
         """Logout returns 200 with status ok (stateless)."""
-        resp = client.post("/api/v1/auth/logout")
-        assert resp.status_code == 200
-        data = resp.get_json()
-        assert data["status"] == "ok"
+        from thread_server import config as cfg
+        cfg.AUTH_ENABLED = False
+        try:
+            resp = client.post("/api/v1/auth/logout")
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["status"] == "ok"
+        finally:
+            cfg.AUTH_ENABLED = True
 
     def test_auth_status_unauthenticated(self, client):
         """Status returns authenticated=false when no token."""
-        resp = client.get("/api/v1/auth/status")
-        data = resp.get_json()
-        assert data["authenticated"] is False
+        from thread_server import config as cfg
+        cfg.AUTH_ENABLED = False
+        try:
+            resp = client.get("/api/v1/auth/status")
+            data = resp.get_json()
+            assert data["authenticated"] is False
+        finally:
+            cfg.AUTH_ENABLED = True
 
     def test_auth_status_authenticated(self, client):
         """Status returns authenticated=true with a valid token."""
-        login_resp = client.post("/api/v1/auth/login", json={
-            "username": "admin", "password": "p",
-        })
-        token = login_resp.get_json()["token"]
-        resp = client.get("/api/v1/auth/status",
-                          headers={"Authorization": f"Bearer {token}"})
-        data = resp.get_json()
-        assert data["authenticated"] is True
-        assert data["username"] == "admin"
+        from thread_server import config as cfg
+        cfg.AUTH_ENABLED = False
+        try:
+            login_resp = client.post("/api/v1/auth/login", json={
+                "password": "p",
+            })
+            token = login_resp.get_json()["token"]
+            resp = client.get("/api/v1/auth/status",
+                              headers={"Authorization": f"Bearer {token}"})
+            data = resp.get_json()
+            assert data["authenticated"] is True
+            assert data["username"] == "admin"
+        finally:
+            cfg.AUTH_ENABLED = True

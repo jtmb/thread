@@ -27,6 +27,7 @@ os.environ["THREAD_POOL_SIZE"] = "3"
 os.environ["THREAD_SEARCH_CACHE_SIZE"] = "8"
 os.environ["THREAD_SEARCH_CACHE_TTL"] = "1"
 os.environ["THREAD_TAG_CACHE_TTL"] = "1"
+os.environ["THREAD_AUTH_ENABLED"] = "false"  # Disable auth for tests by default
 
 
 @pytest.fixture
@@ -84,9 +85,11 @@ def app(temp_db_path, tmp_path):
     os.environ["THREAD_TAG_CACHE_TTL"] = "1"
 
     from thread_server.app import create_app
+    from thread_server import config
 
     app = create_app()
     app.config["TESTING"] = True
+    config.AUTH_ENABLED = False  # Disable auth for all tests by default
     yield app
 
 

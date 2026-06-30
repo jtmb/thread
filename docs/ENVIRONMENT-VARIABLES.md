@@ -83,22 +83,23 @@ Thread has three in-process caches (no Redis, no memcached). All use stdlib — 
 
 ---
 
-## Authentication (Optional — Disabled by Default)
+## Authentication (Enabled by Default)
 
 Token-based auth using HMAC-SHA256 signed tokens and PBKDF2 password hashing. **No JWT library, no bcrypt.** Everything uses Python's stdlib (`hashlib`, `hmac`, `secrets`).
 
-Auth is **disabled** by default (`THREAD_AUTH_ENABLED=false`) — all API routes are open. When enabled, every API request (except `/api/v1/health` and `/api/v1/auth/login`) requires a `Authorization: Bearer <token>` header. The SSE `/api/v1/events` endpoint accepts tokens via `?token=` query param (EventSource cannot set headers).
+Auth is **enabled** by default (`THREAD_AUTH_ENABLED=true`) — all API routes (except `/api/v1/health` and `/api/v1/auth/login`) require a `Authorization: Bearer <token>` header. The SSE `/api/v1/events` endpoint accepts tokens via `?token=` query param (EventSource cannot set headers). Set `THREAD_AUTH_ENABLED=false` to disable auth for development.
 
-To enable auth:
+To set up auth:
 1. Generate a secret key: `python -c "from thread_server.auth import generate_secret_key; print(generate_secret_key())"`
 2. Generate a password hash: `python -m thread_server.cli.set_password`
-3. Set the env vars below
+3. Set the env vars below on every run
 
 | Variable | Default | Valid | Description |
 |----------|---------|-------|-------------|
-| `THREAD_AUTH_ENABLED` | `false` | `true`, `1`, `yes`, `false`, `0`, `no` | Enable Bearer token authentication for all API routes. |
+| `THREAD_AUTH_ENABLED` | `true` | `true`, `1`, `yes`, `false`, `0`, `no` | Enable Bearer token authentication for all API routes. |
 | `THREAD_AUTH_USERNAME` | `admin` | Non-empty string | Username for login. Single-user admin only — no multi-tenant. |
 | `THREAD_AUTH_PASSWORD_HASH` | `""` (empty) | PBKDF2 hash string | Hashed password. Use `python -m thread_server.cli.set_password` to generate. |
+| `THREAD_AUTH_PASSWORD_HASH_FILE` | `data/.password_hash` | File path | Path to file-based password hash override. Set via `POST /api/v1/auth/change-password` at runtime. If this file exists at login, its hash takes priority over `THREAD_AUTH_PASSWORD_HASH`. |
 | `THREAD_AUTH_SECRET_KEY` | `""` (empty) | 64 hex chars | HMAC-SHA256 signing key for tokens. Generate with `secrets.token_hex(32)`. |
 | `THREAD_AUTH_TOKEN_EXPIRY` | `86400` (24h) | ≥ 60 (seconds) | Token lifetime. After expiry, the client must re-login. |
 
@@ -108,6 +109,17 @@ To enable auth:
 - signature: `HMAC-SHA256(header.payload, secret_key)`
 
 **Password format:** `pbkdf2:sha256:600000$<salt>$<hash>` — 600K iterations, OWASP 2023 compliant.
+
+#### Docker Auth Configuration
+
+In Docker, auth secrets are passed via `docker-compose.yml` environment section. The `$` characters in the PBKDF2 hash conflict with docker-compose variable interpolation — use `.env.container` (an `env_file`) to pass the hash without escaping.
+
+| File | Purpose | Git | Contents |
+|------|---------|-----|----------|
+| `.env` | docker-compose auto-load | `.gitignore` | `THREAD_AUTH_SECRET_KEY=<...>` (64 hex chars). Use `$$` for `$` in any hashes here. |
+| `.env.container` | bypasses `$` interpolation via `env_file` in compose | `.gitignore` | `THREAD_AUTH_PASSWORD_HASH=pbkdf2:sha256:600000$<salt>$<hash>` (raw `$`, no escaping needed) |
+
+Generate a secret key: `python -c "import secrets; print(secrets.token_hex(32))"`. Generate the password hash: `python -m thread_server.cli.set_password`.
 
 ---
 
@@ -121,7 +133,7 @@ Safety limits that prevent unbounded queries, memory exhaustion, and abuse. **Al
 | `THREAD_DEFAULT_PAGE_SIZE` | `50` | ≥ 1 | Default entries per page when `limit` is not specified in cursor pagination. |
 | `THREAD_MAX_PAGE_SIZE` | `200` | ≤ 1000 | Hard cap on `limit` in cursor pagination. Enforced at route level. |
 | `THREAD_MAX_CONTENT_LENGTH` | `100000` (100KB) | ≥ 1000 (1KB) | Max characters per entry `content` field. Enforced at model level. |
-| `THREAD_MAX_UPLOAD_SIZE` | `4194304` (4MB) bare-metal<br/>`314572800` (300MB) Docker | ≥ 1024 (1KB) | Max file size for `thread_upload_file`. Enforced before chunking. Docker Compose defaults to 300MB to handle large transcripts. Bare-metal uses a conservative 4MB default — raise it if uploading transcripts. |
+| `THREAD_MAX_UPLOAD_SIZE` | `52428800` (50MB) bare-metal<br/>`314572800` (300MB) Docker | ≥ 1024 (1KB) | Max file size for `thread_upload_file`. Enforced before chunking. Docker Compose defaults to 300MB to handle large transcripts. Bare-metal uses 50MB default — raise it if uploading very large transcripts. |
 
 > **Note:** `MAX_BULK_SIZE` (100 entries per batch create/read) is hardcoded — it's a structural limit of the bulk API, not a runtime tuning knob. It does not have an env var.
 
@@ -136,8 +148,9 @@ THREAD_MAX_CONTENT_LENGTH=200000  # 200KB per entry
 
 ## Bridge Configuration
 
-These are set in the MCP bridge process environment (`.vscode/mcp.json`, `.cline/mcp.json`, or `cline_mcp_settings.json`).
-The bridge runs on the workstation and connects to the Thread server via HTTP.
+These are set in the MCP bridge process environment. The bridge runs on the workstation and connects to the Thread server via HTTP.
+
+**MCP Config Location:** Copilot Chat reads MCP server config from `.vscode/mcp.json` in the current workspace (not globalStorage). Each workspace needs its own config — the `thread-auto-context` skill auto-bootstraps it.
 
 | Variable | Default | Valid | Description |
 |----------|---------|-------|-------------|
@@ -146,6 +159,8 @@ The bridge runs on the workstation and connects to the Thread server via HTTP.
 | `THREAD_REQUEST_TIMEOUT` | `10` | > 0 (seconds) | HTTP request timeout. Increase if connecting over slow network or VPN. |
 | `THREAD_DEFAULT_LIMIT` | `50` | ≥ 1 | Default `limit` for `thread_read_entries` and `thread_search` when not specified. |
 | `THREAD_BATCH_MAX` | `100` | Hardcoded | Max entries per batch read. Not environment-configurable — matches server's `MAX_BULK_SIZE`. |
+| `THREAD_AUTH_PASSWORD` | `""` (empty) | Plaintext password | [Deprecated] Password for bridge auto-login. Prefer `THREAD_API_TOKEN` instead — generate one from the Settings dashboard. |
+| `THREAD_API_TOKEN` | `""` (empty) | HMAC-SHA256 token | Pre-generated non-expiring API token. When set, the bridge uses this token directly without calling `/login`. Generate from Dashboard → Settings → API Token, or via `curl -X POST /api/v1/auth/login -d '{"password":"...","expires_in":0}'`. Takes priority over `THREAD_AUTH_PASSWORD`. |
 
 **Example — remote Pi server over WiFi:**
 ```json
@@ -199,11 +214,24 @@ flowchart TB
 | 15 | `THREAD_DEFAULT_PAGE_SIZE` | Server | `50` | Limits |
 | 16 | `THREAD_MAX_PAGE_SIZE` | Server | `200` | Limits |
 | 17 | `THREAD_MAX_CONTENT_LENGTH` | Server | `100000` (100KB) | Limits |
-| 18 | `THREAD_MAX_UPLOAD_SIZE` | Server | `4194304` (4MB) bare / `314572800` (300MB) Docker | Limits |
+| 18 | `THREAD_MAX_UPLOAD_SIZE` | Server | `52428800` (50MB) bare / `314572800` (300MB) Docker | Limits |
 | 19 | `THREAD_SERVER_URL` | Bridge | `http://localhost:5000` | Network |
 | 20 | `THREAD_DEFAULT_SESSION` | Bridge | `default` | Session |
 | 21 | `THREAD_REQUEST_TIMEOUT` | Bridge | `10` | Network |
 | 22 | `THREAD_DEFAULT_LIMIT` | Bridge | `50` | Limits |
+| 23 | `THREAD_AUTH_ENABLED` | Server | `true` | Auth |
+| 24 | `THREAD_AUTH_USERNAME` | Server | `admin` | Auth |
+| 25 | `THREAD_AUTH_PASSWORD_HASH` | Server | `""` (empty) | Auth |
+| 26 | `THREAD_AUTH_PASSWORD_HASH_FILE` | Server | `data/.password_hash` | Auth |
+| 27 | `THREAD_AUTH_SECRET_KEY` | Server | `""` (empty) | Auth |
+| 28 | `THREAD_AUTH_TOKEN_EXPIRY` | Server | `86400` (24h) | Auth |
+| 29 | `THREAD_SSE_POLL_INTERVAL` | Server | `30` | SSE |
+| 30 | `THREAD_SERVER_URL` | Bridge | `http://localhost:5000` | Network |
+| 31 | `THREAD_DEFAULT_SESSION` | Bridge | `default` | Session |
+| 32 | `THREAD_REQUEST_TIMEOUT` | Bridge | `10` | Network |
+| 33 | `THREAD_DEFAULT_LIMIT` | Bridge | `50` | Limits |
+| 34 | `THREAD_AUTH_PASSWORD` | Bridge | `""` (empty) | Auth (deprecated) |
+| 35 | `THREAD_API_TOKEN` | Bridge | `""` (empty) | Auth |
 
 ---
 

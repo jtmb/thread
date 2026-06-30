@@ -125,6 +125,8 @@ export async function render() {
     if (typeof viewInst.onMount === "function") {
       await viewInst.onMount();
     }
+
+    _updateNavAuthStatus();
   } catch (err) {
     console.error("View mount error:", err);
     root.innerHTML = `<article class="error-state">
@@ -144,6 +146,34 @@ export function init() {
   // Initial render (if hash already set or empty)
   if (document.readyState === "interactive" || document.readyState === "complete") {
     render();
+  }
+}
+
+/** Update the nav bar's auth-status span with current login state. */
+async function _updateNavAuthStatus() {
+  const el = document.getElementById("auth-status");
+  if (!el) return;
+
+  const { Auth } = await import("./auth.js");
+  if (!Auth.isAuthenticated()) {
+    el.textContent = "";
+    return;
+  }
+
+  try {
+    const resp = await fetch("/api/v1/auth/status", {
+      headers: Auth.getToken()
+        ? { Authorization: `Bearer ${Auth.getToken()}` }
+        : {},
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      if (data.authenticated && data.username) {
+        el.textContent = `👤 ${data.username}`;
+      }
+    }
+  } catch {
+    // Silently ignore — auth-status is cosmetic
   }
 }
 

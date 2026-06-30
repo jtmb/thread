@@ -11,7 +11,7 @@ import time
 import uuid
 from pathlib import Path
 
-from flask import Flask, g, request
+from flask import Flask, g, redirect, request
 
 from thread_server import config, cache, models, auth as auth_module
 from thread_server import database as db_module
@@ -107,6 +107,11 @@ def create_app() -> Flask:
     app.register_blueprint(frontend_bp)
 
     logger.info("Route blueprints registered")
+
+    # Root redirect to the dashboard SPA
+    @app.route("/")
+    def root_redirect():
+        return redirect("/dashboard/", code=302)
 
     # 7. Register error handlers
     error_handlers.register_error_handlers(app)

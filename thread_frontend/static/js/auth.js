@@ -49,13 +49,13 @@ export const Auth = {
       _authEnabled = data.auth_enabled === true;
 
       if (!_authEnabled) {
-        // Auto-login so isAuthenticated() returns true
+        // Auth disabled: get a token so the dashboard loads without login
         if (!this.isAuthenticated()) {
           try {
             const loginRes = await fetch("/api/v1/auth/login", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ username: "anonymous", password: "thread" }),
+              body: JSON.stringify({ password: "" }),
             });
             if (loginRes.ok) {
               const loginData = await loginRes.json();

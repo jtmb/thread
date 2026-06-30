@@ -136,8 +136,8 @@ def test_create_session_duplicate_name_raises(db):
 ├── prompts/                  # Reusable prompt templates
 └── agents/                   # Custom agent definitions
 .vscode/
-├── mcp.example.json          # Template — copy to mcp.json and fill paths
-└── mcp.json                  # Actual MCP config (gitignored — has absolute paths)
+├── mcp.example.json          # Template — copy to global MCP config and fill paths
+└── (no mcp.json)             # MCP config is now global: ~/.vscode-server/.../mcp.json
 ```
 
 ### `.github/skills/` — Copilot Skills
@@ -154,9 +154,16 @@ def test_create_session_duplicate_name_raises(db):
 - Pattern: "Always load and follow the **X** skill (`.github/skills/X/SKILL.md`)."
 - **Not required in this repo** — both skills (`thread-auto-context`, `gh-cli`) have `alwaysApply: true`
 
-### `.vscode/mcp.json` — MCP Server Config
-- Workspace-level MCP server configuration (VS Code 1.99+)
+### Global MCP Config — MCP Server Config
+- User-level MCP server configuration at `~/.vscode-server/data/User/globalStorage/github.copilot-chat/mcp.json`
+- Shared across all VS Code workspaces — the canonical source of truth
+- **Workspace symlink**: Copilot Chat currently only reads `.vscode/mcp.json` from the workspace, so each workspace symlinks to the global config:
+  ```bash
+  ln -sf ~/.vscode-server/data/User/globalStorage/github.copilot-chat/mcp.json .vscode/mcp.json
+  ```
 - Auto-created by the `thread-auto-context` skill if missing
-- Contains `servers.thread` entry with `type: "stdio"`, bridge path, env vars
+- Contains `servers.thread` entry with `type: "stdio"`, global bridge path (`~/.thread-bridge/`), env vars
+- Auth: set `THREAD_API_TOKEN` (preferred — generate from dashboard) or `THREAD_AUTH_PASSWORD` (deprecated)
 - Format: `{"servers": {...}, "inputs": []}` — `servers` is a map, not `mcpServers`
 - If the file already exists, merge `servers.thread` — don't overwrite existing servers or inputs
+- Per-project session isolation: the skill passes `session` with `basename "$PWD"` on every tool call

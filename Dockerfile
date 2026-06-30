@@ -19,6 +19,7 @@ RUN addgroup --system appgroup && adduser --system --no-create-home --ingroup ap
 COPY --from=builder /install /usr/local/lib/python3.12/site-packages/
 
 COPY thread_server/ /app/thread_server/
+COPY thread_frontend/ /app/thread_frontend/
 
 RUN mkdir -p /app/data && chown -R appuser:appgroup /app
 
@@ -26,6 +27,13 @@ WORKDIR /app
 USER appuser
 
 ENV PYTHONPATH="/app"
+
+# Auth defaults — override via docker-compose or -e for production
+# Secret key is REQUIRED for token auth (generate with os.urandom(32).hex())
+ENV THREAD_AUTH_ENABLED=true
+ENV THREAD_AUTH_SECRET_KEY=""
+ENV THREAD_AUTH_PASSWORD_HASH=""
+ENV THREAD_AUTH_PASSWORD_HASH_FILE="/app/data/.password_hash"
 
 # Health check uses Python's stdlib urllib — no curl/wget needed in the image
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 --start-period=10s \

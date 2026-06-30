@@ -27,52 +27,50 @@ sequenceDiagram
 ## Prerequisites
 
 - **Thread server running** — either on the same machine (`localhost:5000`) or on a Raspberry Pi on your LAN
-- **Python 3.11+** — same Python that runs the Thread bridge
+- **Python 3.11+** — system Python is fine, the skill auto-creates a venv at `~/.thread-bridge/`
 - **VS Code 1.99+** with GitHub Copilot Chat extension installed
-- The Thread repo cloned (or at least `thread_bridge/` available)
+- The bridge is auto-downloaded to `~/.thread-bridge/` by the auto-context skill
 
-If you haven't started the Thread server yet, see [`DEPLOYMENT.md`](./DEPLOYMENT.md).
+## Step 1: Auto-Bootstrap (Recommended)
 
-## Step 1: Find Your Python Path
+The [`thread-auto-context` skill](../.github/skills/thread-auto-context/SKILL.md) handles everything automatically:
 
-The bridge needs an absolute path to Python. Run:
+1. Downloads the bridge to `~/.thread-bridge/` (global, shared across workspaces)
+2. Creates a venv at `~/.thread-bridge/.venv/` and installs `requests`
+3. Writes the global MCP config at `~/.vscode-server/data/User/globalStorage/github.copilot-chat/mcp.json`
+4. VS Code picks up the config on next reload — Thread tools appear automatically
 
-```bash
-which python3
-# Example: /usr/bin/python3
+**No manual steps needed.** If you prefer manual setup, continue below.
 
-# Or if using a venv:
-cd /home/brajam/repos/thread && echo "$PWD/.venv/bin/python"
-# Example: /home/brajam/repos/thread/.venv/bin/python
-```
+## Manual Setup
 
-Note the full path — you'll use it in the MCP config.
-
-## Step 2: Find the Bridge Script Path
-
-Get the absolute path to the bridge entry point:
+### Step 1: Set Up the Bridge
 
 ```bash
-cd /home/brajam/repos/thread && echo "$PWD/thread_bridge/bridge.py"
-# Example: /home/brajam/repos/thread/thread_bridge/bridge.py
+mkdir -p ~/.thread-bridge/thread_bridge/
+cd ~/.thread-bridge
+python3 -m venv .venv
+.venv/bin/pip install requests>=2.31
+# Download bridge files from GitHub:
+curl -sSfL -o thread_bridge/__init__.py https://raw.githubusercontent.com/jtmb/thread/main/thread_bridge/__init__.py
+curl -sSfL -o thread_bridge/bridge.py https://raw.githubusercontent.com/jtmb/thread/main/thread_bridge/bridge.py
+curl -sSfL -o thread_bridge/client.py https://raw.githubusercontent.com/jtmb/thread/main/thread_bridge/client.py
+curl -sSfL -o thread_bridge/config.py https://raw.githubusercontent.com/jtmb/thread/main/thread_bridge/config.py
 ```
 
-## Step 3: Add MCP Server Config
+### Step 2: Write Global MCP Config
 
-> **💡 Auto-setup**: The [`thread-auto-context` skill](../.github/skills/thread-auto-context/SKILL.md) can auto-bootstrap the entire MCP config — downloading the bridge from GitHub, creating a self-contained venv, and writing `.vscode/mcp.json` on first connect. No manual config needed. See [Automatic Context](#automatic-context).
-
-Create `.vscode/mcp.json` in your project root (copy from [`.vscode/mcp.example.json`](../.vscode/mcp.example.json) if available):
-```json
+Create `~/.vscode-server/data/User/globalStorage/github.copilot-chat/mcp.json` (replace `/home/brajam` with your home directory):
 {
   "servers": {
     "thread": {
       "type": "stdio",
-      "command": "/home/brajam/repos/thread/.venv/bin/python",
+      "command": "/home/brajam/.thread-bridge/.venv/bin/python",
       "args": ["-m", "thread_bridge.bridge"],
-      "cwd": "/home/brajam/repos/thread",
+      "cwd": "/home/brajam/.thread-bridge",
       "env": {
         "THREAD_SERVER_URL": "http://localhost:5000",
-        "THREAD_DEFAULT_SESSION": "copilot",
+        "THREAD_DEFAULT_SESSION": "default",
         "THREAD_REQUEST_TIMEOUT": "10"
       }
     }
@@ -85,12 +83,13 @@ Create `.vscode/mcp.json` in your project root (copy from [`.vscode/mcp.example.
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `command` | Yes | Absolute path to `python3` (system or venv) |
+| `command` | Yes | Absolute path to Python in the bridge venv (`~/.thread-bridge/.venv/bin/python`) |
 | `args` | Yes | `["-m", "thread_bridge.bridge"]` — run as a module |
-| `cwd` | Yes | The Thread repo root (so Python finds `thread_bridge/`) |
+| `cwd` | Yes | `~/.thread-bridge` — the bridge install directory |
 | `env.THREAD_SERVER_URL` | Yes | `http://<host>:5000` — where the Thread server is running |
-| `env.THREAD_DEFAULT_SESSION` | No | Session name to use when not specified in tool calls (default: `"default"`) |
+| `env.THREAD_DEFAULT_SESSION` | No | Fallback session name (default: `"default"`). For per-project isolation, pass `session` explicitly on each tool call using the workspace basename. |
 | `env.THREAD_REQUEST_TIMEOUT` | No | HTTP timeout in seconds (default: `10`) |
+| `env.THREAD_API_TOKEN` | No | Pre-generated API token (from Settings dashboard). Preferred over `THREAD_AUTH_PASSWORD`. Tokens never expire. |
 
 ### Using a Remote Pi Server
 
@@ -99,11 +98,11 @@ If Thread is running on a Raspberry Pi at `192.168.1.100`:
 ```json
 "env": {
   "THREAD_SERVER_URL": "http://192.168.1.100:5000",
-  "THREAD_DEFAULT_SESSION": "copilot"
+  "THREAD_DEFAULT_SESSION": "default"
 }
 ```
 
-## Step 4: Verify the Connection
+## Step 3: Verify the Connection
 
 1. **Reload VS Code** (`Ctrl+Shift+P` → **Developer: Reload Window**)
 2. Open Copilot Chat (`Ctrl+Shift+I`)
@@ -117,8 +116,8 @@ If Thread is running on a Raspberry Pi at `192.168.1.100`:
 ### Troubleshooting
 
 **"MCP server 'thread' failed to start"**
-- Check the Python path exists: `ls /home/brajam/repos/thread/.venv/bin/python`
-- Check the bridge imports correctly: `cd /home/brajam/repos/thread && .venv/bin/python -c "from thread_bridge.bridge import main"`
+- Check the Python path exists: `ls ~/.thread-bridge/.venv/bin/python`
+- Check the bridge imports correctly: `cd ~/.thread-bridge && .venv/bin/python -c "from thread_bridge.bridge import main"`
 
 **Tools appear but return errors**
 - Verify the Thread server is running: `curl http://localhost:5000/api/v1/health`
@@ -151,7 +150,7 @@ Once connected, Copilot can use these tools automatically. **Sessions are auto-c
 
 ### Tell Copilot Which Session to Use
 
-Copilot defaults to the session from `THREAD_DEFAULT_SESSION`. To use a different one, just mention it:
+Copilot defaults to `THREAD_DEFAULT_SESSION` from the global MCP config. For per-project isolation, Copilot passes `session` with the workspace basename on each call.
 
 > *"Search for 'authentication' in the **backend-design** session"*
 
@@ -177,7 +176,7 @@ After Copilot makes a design decision or you discuss something important:
 
 The `thread-auto-context` skill (`alwaysApply: true`) makes context saving automatic — no setup files required. When Copilot connects to a workspace with the skill, it:
 
-1. **Bootstraps the bridge** — downloads the 5 bridge files from `jtmb/thread` main on GitHub, creates a self-contained venv at `.vscode/thread-bridge/`, installs `requests`, and writes `.vscode/mcp.json` — zero manual steps
+1. **Bootstraps the bridge** — downloads the 5 bridge files from `jtmb/thread` main on GitHub, creates a self-contained venv at `~/.thread-bridge/`, installs `requests`, and writes the global MCP config at `~/.vscode-server/data/User/globalStorage/github.copilot-chat/mcp.json` — zero manual steps
 2. **Searches Thread automatically** with every user question to surface relevant past context
 3. **Saves decisions, preferences, and constraints** during the session
 4. **Saves a summary** at session end

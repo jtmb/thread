@@ -54,10 +54,12 @@ async function request(path, options = {}) {
  */
 export class ThreadAPI {
   // ── Auth ────────────────────────────────────────────────────────────────
-  async login(username, password) {
+  async login(password, expiresIn = null) {
+    const body = { password };
+    if (expiresIn !== null) body.expires_in = expiresIn;
     const res = await request("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(await res.text());
     return res.json();
@@ -73,6 +75,16 @@ export class ThreadAPI {
     const res = await request("/auth/status");
     if (!res.ok) throw new Error(await res.text());
     return res.json();
+  }
+
+  async changePassword(currentPassword, newPassword) {
+    const res = await request("/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Failed to change password");
+    return data;
   }
 
   // ── Health & Stats ──────────────────────────────────────────────────────

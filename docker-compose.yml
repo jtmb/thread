@@ -49,6 +49,18 @@ services:
       - THREAD_SEARCH_CACHE_TTL=5
       # How long tag lists stay cached (seconds)
       - THREAD_TAG_CACHE_TTL=30
+
+      # ── Authentication ──────────────────────────────────────────────────────
+      # Enable token-based authentication (default: true)
+      - THREAD_AUTH_ENABLED=${THREAD_AUTH_ENABLED:-true}
+      # HMAC-SHA256 signing key for JWT-like tokens (REQUIRED for token auth)
+      - THREAD_AUTH_SECRET_KEY=${THREAD_AUTH_SECRET_KEY}
+      # PBKDF2 password hash for admin login — use env_file to avoid $ interpolation
+      - THREAD_AUTH_PASSWORD_HASH_FILE=/app/data/.password_hash
+      # Token expiry in seconds (default: 86400 = 24h, 0 = never expires)
+      - THREAD_AUTH_TOKEN_EXPIRY=${THREAD_AUTH_TOKEN_EXPIRY:-86400}
+    env_file:
+      - .env.container
     restart: unless-stopped
     # Resource limits — conservative for Pi, generous for x86
     deploy:

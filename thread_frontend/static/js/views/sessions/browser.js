@@ -8,7 +8,7 @@
  * - Inline priority change (select dropdown)
  * - Inline tag editing
  * - Delete entry with modal confirmation
- * - Print button (print.css already hides UI chrome)
+ * - Export dropdown (JSON / Markdown download)
  *
  * Route: #sessions/:name?limit=50
  * Uses: api.listEntries(), api.updateEntry(), api.deleteEntry()
@@ -48,7 +48,6 @@ export class BrowserView extends BaseView {
         this._cursor = data[data.length - 1].id;
       }
       this._render();
-      this._bindEvents();
     } catch (err) {
       this.showError(err.message, `#sessions/${encodeURIComponent(name)}`);
     }
@@ -75,7 +74,13 @@ export class BrowserView extends BaseView {
       </header>
 
       <div class="browser-toolbar">
-        <button class="browser-print-btn">🖨 Print</button>
+        <div class="export-dropdown">
+          <button class="browser-export-btn">⬇ Export</button>
+          <div class="export-menu" hidden>
+            <button data-format="json">📄 JSON</button>
+            <button data-format="markdown">📝 Markdown</button>
+          </div>
+        </div>
         <button class="browser-refresh-btn">🔄 Refresh</button>
       </div>
 
@@ -103,7 +108,8 @@ export class BrowserView extends BaseView {
   }
 
   _renderEntryCard(entry) {
-    const isExpanded = this._expandedId === entry.id;
+    const entryId = String(entry.id ?? "");
+    const isExpanded = this._expandedId === entryId;
     const escContent = entry.content || "";
     const preview = escContent.length > 300 && !isExpanded
       ? escapeHtml(escContent).slice(0, 300) + "…"
@@ -141,10 +147,47 @@ export class BrowserView extends BaseView {
       loadBtn.addEventListener("click", () => this._loadMore());
     }
 
-    // Print
-    const printBtn = this.root.querySelector(".browser-print-btn");
-    if (printBtn) {
-      printBtn.addEventListener("click", () => window.print());
+    // Export dropdown
+    const exportBtn = this.root.querySelector(".browser-export-btn");
+    const exportMenu = this.root.querySelector(".export-menu");
+    if (exportBtn && exportMenu) {
+      let closeHandler = null;
+
+      exportBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const opening = exportMenu.hidden;
+        exportMenu.hidden = !exportMenu.hidden;
+
+        // Remove any stale close handler
+        if (closeHandler) {
+          document.removeEventListener("click", closeHandler);
+          closeHandler = null;
+        }
+
+        // When opening, listen for the next outside click to close
+        if (opening) {
+          closeHandler = () => {
+            exportMenu.hidden = true;
+            document.removeEventListener("click", closeHandler);
+            closeHandler = null;
+          };
+          // Defer registration so the current click doesn't trigger it
+          setTimeout(() => document.addEventListener("click", closeHandler), 0);
+        }
+      });
+
+      // Format buttons
+      exportMenu.querySelectorAll("button[data-format]").forEach((btn) => {
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          exportMenu.hidden = true;
+          if (closeHandler) {
+            document.removeEventListener("click", closeHandler);
+            closeHandler = null;
+          }
+          this._exportEntries(btn.dataset.format);
+        });
+      });
     }
 
     // Refresh
@@ -265,5 +308,67 @@ export class BrowserView extends BaseView {
     } finally {
       this._loading = false;
     }
+  }
+
+  /**
+   * Export all loaded entries as a downloadable file.
+   * @param {"json"|"markdown"} format
+   */
+  _exportEntries(format) {
+    const entries = this._entries;
+    if (entries.length === 0) {
+      showToast("No entries to export", "error");
+      return;
+    }
+
+    const safeName = this._sessionName.replace(/[^a-zA-Z0-9_-]/g, "_");
+    let filename, mimeType, content;
+
+    if (format === "json") {
+      filename = `${safeName}-export.json`;
+      mimeType = "application/json";
+      content = JSON.stringify(
+        entries.map((e) => ({
+          id: e.id,
+          content: e.content,
+          priority: e.priority,
+          tags: e.tags,
+          created_at: e.created_at,
+        })),
+        null,
+        2
+      );
+    } else {
+      filename = `${safeName}-export.md`;
+      mimeType = "text/markdown";
+      content = entries
+        .map((e) => {
+          const prio = `P${e.priority ?? "—"}`;
+          const tags = (e.tags || []).map((t) => `\`${t}\``).join(" ");
+          const time = e.created_at ? new Date(e.created_at).toISOString() : "";
+          return `## Entry ${e.id ?? "?"}
+
+**Priority:** ${prio}  
+**Tags:** ${tags || "—"}  
+**Created:** ${time}
+
+${e.content || ""}
+
+---`;
+        })
+        .join("\n\n");
+    }
+
+    const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    showToast(`Exported ${entries.length} entries as ${format.toUpperCase()}`, "success");
   }
 }

@@ -87,3 +87,41 @@ Total installed size: ~500KB. `requests.Session()` for HTTP keep-alive connectio
 | **Total** | **~90-110 MB** | **~160-195 MB** |
 
 systemd `MemoryMax=800M`, `MemoryHigh=600M` — ample headroom for speed-first configuration.
+
+## Frontend
+
+Served as static files by Flask/Waitress at `/dashboard/static/`. No build step, no bundler, no Node.js dependency.
+
+| Component | Version | Purpose | Why |
+|-----------|---------|---------|-----|
+| **Vanilla JS** | ES2020+ | SPA framework | Zero framework overhead (~15KB total JS). ES modules with `import`/`export`. No React/Vue/Angular — the SPA is simple enough (8 views) that a framework adds complexity without benefit |
+| **Pico.css** | v2.x | CSS framework | Classless dark theme (~30KB). Semantic HTML gets styled automatically — no utility classes needed. Dark mode built-in. Tiny footprint vs Bootstrap (~150KB) or Tailwind (build step) |
+| **Chart.js** | 4.4.7 | Canvas charts | Dashboard analytics (sessions chart, uptime gauge). Lightweight (~60KB), no D3 dependency. Used via global `window.Chart` CDN script tag |
+| **Jinja2** | stdlib (Flask) | HTML template | Renders `index.html` once on load. Injects CSRF token, auth state, and Pico.css theme class at render time. Template cached in production mode |
+| **vis-network** | (future) | Graph visualization | Planned for GraphView force-directed entry relationship diagram. ~200KB, peer dependency of vis-data |
+
+### Frontend File Sizes
+
+| File | Size | Purpose |
+|------|------|---------|
+| `index.html` | ~2KB | Shell HTML, Jinja2 template |
+| `pico.min.css` | ~30KB | Dark theme foundation (vendor) |
+| `app.css` | ~4KB | Custom styles (layout, cards, browser, charts, modals) |
+| `print.css` | ~0.5KB | Print-specific rules (hides chrome) |
+| `router.js` | ~3KB | Hash router + keyboard shortcuts |
+| `api.js` | ~3KB | ThreadAPI fetch wrapper |
+| `auth.js` | ~2KB | JWT token management |
+| `utils.js` | ~1KB | escapeHtml, showToast, relativeTime, priorityColor |
+| `views/*.js` | ~12KB | 8 view classes (Base, Login, Dashboard, Browser, History, Graph, Search, Upload, Settings) |
+| **Total JS** | **~15KB** | Zero framework overhead |
+
+### Why No Build Step
+
+The SPA is small enough (8 views, ~15KB JS) that a bundler (webpack/vite/esbuild) adds complexity without benefit:
+- **No TypeScript** — vanilla JS with JSDoc comments
+- **No JSX** — `mountHTML()` from template literals
+- **No CSS modules** — single `app.css` with BEM-ish class names
+- **No minification needed** — ~15KB is smaller than most bundler runtimes
+- **Instant reload** — edit JS/CSS, refresh browser, see changes. No `npm run dev` watching
+
+Browser support: ES modules (`import`/`export`) — all modern browsers since 2020.

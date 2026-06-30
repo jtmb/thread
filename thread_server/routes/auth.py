@@ -1,16 +1,17 @@
-"""Authentication routes — login, logout, and status check.
+"""Authentication routes — login, logout, status, and password change.
 
 Blueprint: auth_bp
 URL prefix: /api/v1/auth
 
 Endpoints:
-  POST /api/v1/auth/login  — exchange username + password for a Bearer token
-  POST /api/v1/auth/logout — acknowledge logout (stateless, token is client-side)
-  GET  /api/v1/auth/status — check if the request carries a valid token
+  POST /api/v1/auth/login           — exchange password for a Bearer token
+  POST /api/v1/auth/logout          — acknowledge logout (stateless, token is client-side)
+  POST /api/v1/auth/change-password — change admin password (requires valid token)
+  GET  /api/v1/auth/status          — check if the request carries a valid token
 
-When THREAD_AUTH_ENABLED=false, login always succeeds with a dummy token
-and password verification is skipped. This keeps the API contract stable
-regardless of whether auth is enabled.
+Username is always "admin" (single-user system) — the client only sends a
+password. When THREAD_AUTH_ENABLED=false, any password succeeds with a
+dummy token, keeping the API contract stable regardless of auth state.
 """
 
 import logging
@@ -28,10 +29,16 @@ auth_bp = Blueprint("auth", __name__)
 def login():
     """Authenticate and return a Bearer token.
 
-    Request body: {"username": "...", "password": "..."}
+    Request body: {"password": "...", "expires_in": <int|0>}
+    Username is always "admin" (single-user system).
+
+    expires_in controls token lifetime:
+      - absent (default): uses AUTH_TOKEN_EXPIRY (24h by default)
+      - 0: token never expires (no `exp` claim in payload)
+      - > 0: token expires after that many seconds
 
     Responses:
-        200: {"token": "...", "expires_in": 86400, "token_type": "Bearer"}
+        200: {"token": "...", "expires_in": 86400|null, "token_type": "Bearer"}
         400: Missing or malformed body
         401: Invalid credentials
     """
@@ -39,35 +46,35 @@ def login():
     if not body:
         return jsonify({"error": "bad_request", "message": "JSON body required"}), 400
 
-    username = body.get("username", "").strip()
     password = body.get("password", "")
 
-    if not username or not password:
-        return jsonify({"error": "bad_request", "message": "username and password are required"}), 400
+    if not password:
+        return jsonify({"error": "bad_request", "message": "password is required"}), 400
 
-    # Auth disabled: auto-succeed with a token for any credentials
+    # Parse optional expires_in — 0 means no expiry, absent means default
+    expires_in = body.get("expires_in")
+    if expires_in is not None and (not isinstance(expires_in, int) or expires_in < 0):
+        return jsonify({"error": "bad_request", "message": "expires_in must be a non-negative integer"}), 400
+
+    # Auth disabled: auto-succeed with a token for any password
     if not config.AUTH_ENABLED:
-        token = auth.create_token(username)
+        token = auth.create_token(config.AUTH_USERNAME, expiry_seconds=expires_in)
         return jsonify({
             "token": token,
-            "expires_in": config.AUTH_TOKEN_EXPIRY,
+            "expires_in": None if expires_in == 0 else (expires_in if expires_in is not None else config.AUTH_TOKEN_EXPIRY),
             "token_type": "Bearer",
         })
 
-    # Auth enabled: verify credentials
-    if username != config.AUTH_USERNAME:
-        logger.warning("Login attempt for unknown user: %s", username)
-        return jsonify({"error": "unauthorized", "message": "Invalid username or password"}), 401
+    # Auth enabled: verify password for the single admin user
+    if not auth.verify_password(password, auth.get_password_hash()):
+        logger.warning("Login failed (bad password)")
+        return jsonify({"error": "unauthorized", "message": "Invalid password"}), 401
 
-    if not auth.verify_password(password, config.AUTH_PASSWORD_HASH):
-        logger.warning("Login failed for user: %s (bad password)", username)
-        return jsonify({"error": "unauthorized", "message": "Invalid username or password"}), 401
-
-    token = auth.create_token(username)
-    logger.info("User '%s' logged in successfully", username)
+    token = auth.create_token(config.AUTH_USERNAME, expiry_seconds=expires_in)
+    logger.info("User '%s' logged in successfully", config.AUTH_USERNAME)
     return jsonify({
         "token": token,
-        "expires_in": config.AUTH_TOKEN_EXPIRY,
+        "expires_in": None if expires_in == 0 else (expires_in if expires_in is not None else config.AUTH_TOKEN_EXPIRY),
         "token_type": "Bearer",
     })
 
@@ -81,6 +88,50 @@ def logout():
     blacklisting without changing the client contract.
     """
     return jsonify({"status": "ok"})
+
+
+@auth_bp.route("/api/v1/auth/change-password", methods=["POST"])
+def change_password():
+    """Change the admin password.
+
+    Request body: {"current_password": "...", "new_password": "..."}
+
+    Validates the current password, then persists the new password hash
+    to disk so it survives server restarts.
+
+    Responses:
+        200: {"status": "ok", "message": "Password changed"}
+        400: Missing or malformed body, or new password too short
+        401: Current password incorrect
+    """
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "bad_request", "message": "JSON body required"}), 400
+
+    # Password changes only make sense when auth is enabled
+    if not config.AUTH_ENABLED:
+        return jsonify({"error": "bad_request", "message": "Authentication is disabled, no password to change"}), 400
+
+    current_password = body.get("current_password", "")
+    new_password = body.get("new_password", "")
+
+    if not current_password or not new_password:
+        return jsonify({"error": "bad_request", "message": "current_password and new_password are required"}), 400
+
+    if len(new_password) < 8:
+        return jsonify({"error": "bad_request", "message": "New password must be at least 8 characters"}), 400
+
+    # Verify current password
+    if not auth.verify_password(current_password, auth.get_password_hash()):
+        logger.warning("Change password failed: current password incorrect")
+        return jsonify({"error": "unauthorized", "message": "Current password is incorrect"}), 401
+
+    # Hash and persist the new password
+    new_hash = auth.hash_password(new_password)
+    auth.save_password_hash(new_hash)
+
+    logger.info("Password changed successfully")
+    return jsonify({"status": "ok", "message": "Password changed"})
 
 
 @auth_bp.route("/api/v1/auth/status", methods=["GET"])
